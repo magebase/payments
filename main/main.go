@@ -29,6 +29,7 @@ type App struct {
 	chargeService   *stripe.ChargeService
 	refundService   *stripe.RefundService
 	disputeService  *stripe.DisputeService
+	webhookService  *stripe.WebhookService
 }
 
 // NewApp creates a new application instance
@@ -38,6 +39,13 @@ func NewApp() *App {
 	chargeService := stripe.NewChargeService()
 	refundService := stripe.NewRefundService()
 	disputeService := stripe.NewDisputeService()
+	
+	// Initialize webhook service with secret from environment
+	webhookSecret := os.Getenv("STRIPE_WEBHOOK_SECRET")
+	if webhookSecret == "" {
+		webhookSecret = "whsec_test_secret" // Default for testing
+	}
+	webhookService := stripe.NewWebhookService(webhookSecret)
 
 	// Create Fiber app
 	fiberApp := fiber.New(fiber.Config{
@@ -63,6 +71,7 @@ func NewApp() *App {
 		chargeService:   chargeService,
 		refundService:   refundService,
 		disputeService:  disputeService,
+		webhookService:  webhookService,
 	}
 
 	app.registerRoutes()
@@ -116,6 +125,10 @@ func (a *App) registerRoutes() {
 	disputes.Get("/:id", a.getDispute)
 	disputes.Get("/", a.listDisputes)
 	disputes.Put("/:id/status", a.updateDisputeStatus)
+	
+	// Webhook routes
+	webhooks := api.Group("/webhooks")
+	webhooks.Post("/stripe", a.handleStripeWebhook)
 }
 
 // createCustomer handles customer creation
@@ -485,6 +498,29 @@ func (a *App) updateDisputeStatus(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(dispute)
+}
+
+// handleStripeWebhook handles Stripe webhook events
+func (a *App) handleStripeWebhook(c *fiber.Ctx) error {
+	// Parse the webhook request
+	webhookReq, err := a.webhookService.ParseWebhookRequest(c)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Process the webhook
+	if err := a.webhookService.ProcessWebhook(c.Context(), webhookReq); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Return success
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"status": "webhook processed successfully",
+	})
 }
 
 // Run starts the application
