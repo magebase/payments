@@ -1,0 +1,12 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: billing-api
+  namespace: default
+spec:
+  template:
+    spec:
+      containers:
+        - image: docker.io/yourrepo/billing-api:latest
+          ports:
+            - containerPort: 8080
