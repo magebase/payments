@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"apis/payments/services/stripe"
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -44,32 +45,32 @@ func TestCreateRefund(t *testing.T) {
 	t.Run("should create refund successfully", func(t *testing.T) {
 		// Arrange
 		expectedRefund := &stripe.Refund{
-			ID:          "re_1234567890",
-			ChargeID:    "ch_1234567890",
-			Amount:      1000,
-			Currency:    "usd",
-			Status:      "succeeded",
-			Reason:      "requested_by_customer",
-			Metadata:    map[string]string{"note": "Customer requested refund"},
-			CreatedAt:   time.Now(),
+			ID:        "re_1234567890",
+			ChargeID:  "ch_1234567890",
+			Amount:    1000,
+			Currency:  "usd",
+			Status:    "succeeded",
+			Reason:    "requested_by_customer",
+			Metadata:  map[string]string{"note": "Customer requested refund"},
+			CreatedAt: time.Now(),
 		}
-		
+
 		mockService := &MockRefundService{
 			shouldSucceed: true,
 			mockRefund:    expectedRefund,
 		}
-		
+
 		ctx := context.Background()
 		request := &stripe.RefundRequest{
-			ChargeID:   "ch_1234567890",
-			Amount:     1000, // $10.00
-			Reason:     "requested_by_customer",
-			Metadata:   map[string]string{"note": "Customer requested refund"},
+			ChargeID: "ch_1234567890",
+			Amount:   1000, // $10.00
+			Reason:   "requested_by_customer",
+			Metadata: map[string]string{"note": "Customer requested refund"},
 		}
-		
+
 		// Act
 		result, err := mockService.CreateRefund(ctx, request)
-		
+
 		// Assert
 		assert.NoError(t, err)
 		assert.NotNil(t, result)
@@ -78,7 +79,7 @@ func TestCreateRefund(t *testing.T) {
 		assert.Equal(t, expectedRefund.Amount, result.Amount)
 		assert.Equal(t, expectedRefund.Status, result.Status)
 	})
-	
+
 	// Test case: Fail to create refund for non-existent charge
 	t.Run("should fail when charge does not exist", func(t *testing.T) {
 		// Arrange
@@ -86,23 +87,23 @@ func TestCreateRefund(t *testing.T) {
 			shouldSucceed: false,
 			mockError:     fmt.Errorf("charge not found"),
 		}
-		
+
 		ctx := context.Background()
 		request := &stripe.RefundRequest{
 			ChargeID: "ch_nonexistent",
 			Amount:   1000,
 			Reason:   "requested_by_customer",
 		}
-		
+
 		// Act
 		result, err := mockService.CreateRefund(ctx, request)
-		
+
 		// Assert
 		assert.Error(t, err)
 		assert.Nil(t, result)
 		assert.Contains(t, err.Error(), "charge not found")
 	})
-	
+
 	// Test case: Fail to create refund for already refunded charge
 	t.Run("should fail when charge is already refunded", func(t *testing.T) {
 		// Arrange
@@ -110,17 +111,17 @@ func TestCreateRefund(t *testing.T) {
 			shouldSucceed: false,
 			mockError:     fmt.Errorf("charge already refunded"),
 		}
-		
+
 		ctx := context.Background()
 		request := &stripe.RefundRequest{
 			ChargeID: "ch_already_refunded",
 			Amount:   1000,
 			Reason:   "requested_by_customer",
 		}
-		
+
 		// Act
 		result, err := mockService.CreateRefund(ctx, request)
-		
+
 		// Assert
 		assert.Error(t, err)
 		assert.Nil(t, result)
@@ -141,24 +142,24 @@ func TestGetRefund(t *testing.T) {
 			Reason:    "requested_by_customer",
 			CreatedAt: time.Now(),
 		}
-		
+
 		mockService := &MockRefundService{
 			shouldSucceed: true,
 			mockRefund:    expectedRefund,
 		}
-		
+
 		ctx := context.Background()
 		refundID := "re_1234567890"
-		
+
 		// Act
 		result, err := mockService.GetRefund(ctx, refundID)
-		
+
 		// Assert
 		assert.NoError(t, err)
 		assert.NotNil(t, result)
 		assert.Equal(t, expectedRefund.ID, result.ID)
 	})
-	
+
 	// Test case: Fail to get non-existent refund
 	t.Run("should fail when refund does not exist", func(t *testing.T) {
 		// Arrange
@@ -166,13 +167,13 @@ func TestGetRefund(t *testing.T) {
 			shouldSucceed: false,
 			mockError:     fmt.Errorf("refund not found"),
 		}
-		
+
 		ctx := context.Background()
 		refundID := "re_nonexistent"
-		
+
 		// Act
 		result, err := mockService.GetRefund(ctx, refundID)
-		
+
 		// Assert
 		assert.Error(t, err)
 		assert.Nil(t, result)
@@ -204,19 +205,19 @@ func TestListRefunds(t *testing.T) {
 				CreatedAt: time.Now(),
 			},
 		}
-		
+
 		mockService := &MockRefundService{
 			shouldSucceed: true,
 			mockRefunds:   expectedRefunds,
 		}
-		
+
 		ctx := context.Background()
 		chargeID := "ch_1234567890"
 		limit := 10
-		
+
 		// Act
 		result, err := mockService.ListRefunds(ctx, chargeID, limit)
-		
+
 		// Assert
 		assert.NoError(t, err)
 		assert.NotNil(t, result)
@@ -224,24 +225,24 @@ func TestListRefunds(t *testing.T) {
 		assert.Equal(t, expectedRefunds[0].ID, result[0].ID)
 		assert.Equal(t, expectedRefunds[1].ID, result[1].ID)
 	})
-	
+
 	// Test case: Return empty list when no refunds exist
 	t.Run("should return empty list when no refunds exist", func(t *testing.T) {
 		// Arrange
 		expectedRefunds := []*stripe.Refund{}
-		
+
 		mockService := &MockRefundService{
 			shouldSucceed: true,
 			mockRefunds:   expectedRefunds,
 		}
-		
+
 		ctx := context.Background()
 		chargeID := "ch_no_refunds"
 		limit := 10
-		
+
 		// Act
 		result, err := mockService.ListRefunds(ctx, chargeID, limit)
-		
+
 		// Assert
 		assert.NoError(t, err)
 		assert.NotNil(t, result)

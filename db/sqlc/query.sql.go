@@ -31,8 +31,8 @@ type CreateChargeParams struct {
 	Metadata        pqtype.NullRawMessage `json:"metadata"`
 }
 
-func (q *Queries) CreateCharge(ctx context.Context, db DBTX, arg CreateChargeParams) (Charge, error) {
-	row := db.QueryRowContext(ctx, CreateCharge,
+func (q *Queries) CreateCharge(ctx context.Context, arg CreateChargeParams) (Charge, error) {
+	row := q.db.QueryRowContext(ctx, CreateCharge,
 		arg.ID,
 		arg.Amount,
 		arg.Currency,
@@ -75,8 +75,8 @@ type CreateCustomerParams struct {
 	Metadata    pqtype.NullRawMessage `json:"metadata"`
 }
 
-func (q *Queries) CreateCustomer(ctx context.Context, db DBTX, arg CreateCustomerParams) (Customer, error) {
-	row := db.QueryRowContext(ctx, CreateCustomer,
+func (q *Queries) CreateCustomer(ctx context.Context, arg CreateCustomerParams) (Customer, error) {
+	row := q.db.QueryRowContext(ctx, CreateCustomer,
 		arg.ID,
 		arg.Email,
 		arg.Name,
@@ -118,8 +118,8 @@ type CreatePaymentMethodParams struct {
 	Metadata        pqtype.NullRawMessage `json:"metadata"`
 }
 
-func (q *Queries) CreatePaymentMethod(ctx context.Context, db DBTX, arg CreatePaymentMethodParams) (PaymentMethod, error) {
-	row := db.QueryRowContext(ctx, CreatePaymentMethod,
+func (q *Queries) CreatePaymentMethod(ctx context.Context, arg CreatePaymentMethodParams) (PaymentMethod, error) {
+	row := q.db.QueryRowContext(ctx, CreatePaymentMethod,
 		arg.ID,
 		arg.Type,
 		arg.CustomerID,
@@ -164,8 +164,8 @@ type CreateRefundParams struct {
 	Metadata pqtype.NullRawMessage `json:"metadata"`
 }
 
-func (q *Queries) CreateRefund(ctx context.Context, db DBTX, arg CreateRefundParams) (Refund, error) {
-	row := db.QueryRowContext(ctx, CreateRefund,
+func (q *Queries) CreateRefund(ctx context.Context, arg CreateRefundParams) (Refund, error) {
+	row := q.db.QueryRowContext(ctx, CreateRefund,
 		arg.ID,
 		arg.ChargeID,
 		arg.Amount,
@@ -194,8 +194,8 @@ DELETE FROM customers
 WHERE id = $1
 `
 
-func (q *Queries) DeleteCustomer(ctx context.Context, db DBTX, id string) error {
-	_, err := db.ExecContext(ctx, DeleteCustomer, id)
+func (q *Queries) DeleteCustomer(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, DeleteCustomer, id)
 	return err
 }
 
@@ -209,8 +209,8 @@ type DeletePaymentMethodParams struct {
 	CustomerID string `json:"customer_id"`
 }
 
-func (q *Queries) DeletePaymentMethod(ctx context.Context, db DBTX, arg DeletePaymentMethodParams) error {
-	_, err := db.ExecContext(ctx, DeletePaymentMethod, arg.ID, arg.CustomerID)
+func (q *Queries) DeletePaymentMethod(ctx context.Context, arg DeletePaymentMethodParams) error {
+	_, err := q.db.ExecContext(ctx, DeletePaymentMethod, arg.ID, arg.CustomerID)
 	return err
 }
 
@@ -219,8 +219,8 @@ SELECT id, amount, currency, status, customer_id, payment_method_id, description
 WHERE id = $1 LIMIT 1
 `
 
-func (q *Queries) GetCharge(ctx context.Context, db DBTX, id string) (Charge, error) {
-	row := db.QueryRowContext(ctx, GetCharge, id)
+func (q *Queries) GetCharge(ctx context.Context, id string) (Charge, error) {
+	row := q.db.QueryRowContext(ctx, GetCharge, id)
 	var i Charge
 	err := row.Scan(
 		&i.ID,
@@ -253,8 +253,8 @@ type GetChargeStatsRow struct {
 	SuccessfulAmount  int64 `json:"successful_amount"`
 }
 
-func (q *Queries) GetChargeStats(ctx context.Context, db DBTX) (GetChargeStatsRow, error) {
-	row := db.QueryRowContext(ctx, GetChargeStats)
+func (q *Queries) GetChargeStats(ctx context.Context) (GetChargeStatsRow, error) {
+	row := q.db.QueryRowContext(ctx, GetChargeStats)
 	var i GetChargeStatsRow
 	err := row.Scan(
 		&i.TotalCharges,
@@ -270,8 +270,8 @@ SELECT id, email, name, phone, description, metadata, created_at, updated_at FRO
 WHERE id = $1 LIMIT 1
 `
 
-func (q *Queries) GetCustomer(ctx context.Context, db DBTX, id string) (Customer, error) {
-	row := db.QueryRowContext(ctx, GetCustomer, id)
+func (q *Queries) GetCustomer(ctx context.Context, id string) (Customer, error) {
+	row := q.db.QueryRowContext(ctx, GetCustomer, id)
 	var i Customer
 	err := row.Scan(
 		&i.ID,
@@ -291,8 +291,8 @@ SELECT id, email, name, phone, description, metadata, created_at, updated_at FRO
 WHERE email = $1 LIMIT 1
 `
 
-func (q *Queries) GetCustomerByEmail(ctx context.Context, db DBTX, email string) (Customer, error) {
-	row := db.QueryRowContext(ctx, GetCustomerByEmail, email)
+func (q *Queries) GetCustomerByEmail(ctx context.Context, email string) (Customer, error) {
+	row := q.db.QueryRowContext(ctx, GetCustomerByEmail, email)
 	var i Customer
 	err := row.Scan(
 		&i.ID,
@@ -321,8 +321,8 @@ type GetCustomerStatsRow struct {
 	NewCustomers7d  int64 `json:"new_customers_7d"`
 }
 
-func (q *Queries) GetCustomerStats(ctx context.Context, db DBTX) (GetCustomerStatsRow, error) {
-	row := db.QueryRowContext(ctx, GetCustomerStats)
+func (q *Queries) GetCustomerStats(ctx context.Context) (GetCustomerStatsRow, error) {
+	row := q.db.QueryRowContext(ctx, GetCustomerStats)
 	var i GetCustomerStatsRow
 	err := row.Scan(&i.TotalCustomers, &i.NewCustomers30d, &i.NewCustomers7d)
 	return i, err
@@ -333,8 +333,8 @@ SELECT id, type, customer_id, card_last4, card_brand, card_exp_month, card_exp_y
 WHERE id = $1 LIMIT 1
 `
 
-func (q *Queries) GetPaymentMethod(ctx context.Context, db DBTX, id string) (PaymentMethod, error) {
-	row := db.QueryRowContext(ctx, GetPaymentMethod, id)
+func (q *Queries) GetPaymentMethod(ctx context.Context, id string) (PaymentMethod, error) {
+	row := q.db.QueryRowContext(ctx, GetPaymentMethod, id)
 	var i PaymentMethod
 	err := row.Scan(
 		&i.ID,
@@ -356,8 +356,8 @@ SELECT id, charge_id, amount, currency, status, reason, metadata, created_at, up
 WHERE id = $1 LIMIT 1
 `
 
-func (q *Queries) GetRefund(ctx context.Context, db DBTX, id string) (Refund, error) {
-	row := db.QueryRowContext(ctx, GetRefund, id)
+func (q *Queries) GetRefund(ctx context.Context, id string) (Refund, error) {
+	row := q.db.QueryRowContext(ctx, GetRefund, id)
 	var i Refund
 	err := row.Scan(
 		&i.ID,
@@ -389,8 +389,8 @@ type GetRefundStatsRow struct {
 	SuccessfulAmount  int64 `json:"successful_amount"`
 }
 
-func (q *Queries) GetRefundStats(ctx context.Context, db DBTX) (GetRefundStatsRow, error) {
-	row := db.QueryRowContext(ctx, GetRefundStats)
+func (q *Queries) GetRefundStats(ctx context.Context) (GetRefundStatsRow, error) {
+	row := q.db.QueryRowContext(ctx, GetRefundStats)
 	var i GetRefundStatsRow
 	err := row.Scan(
 		&i.TotalRefunds,
@@ -412,8 +412,8 @@ type ListAllChargesParams struct {
 	Offset int32 `json:"offset"`
 }
 
-func (q *Queries) ListAllCharges(ctx context.Context, db DBTX, arg ListAllChargesParams) ([]Charge, error) {
-	rows, err := db.QueryContext(ctx, ListAllCharges, arg.Limit, arg.Offset)
+func (q *Queries) ListAllCharges(ctx context.Context, arg ListAllChargesParams) ([]Charge, error) {
+	rows, err := q.db.QueryContext(ctx, ListAllCharges, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -457,8 +457,8 @@ type ListAllRefundsParams struct {
 	Offset int32 `json:"offset"`
 }
 
-func (q *Queries) ListAllRefunds(ctx context.Context, db DBTX, arg ListAllRefundsParams) ([]Refund, error) {
-	rows, err := db.QueryContext(ctx, ListAllRefunds, arg.Limit, arg.Offset)
+func (q *Queries) ListAllRefunds(ctx context.Context, arg ListAllRefundsParams) ([]Refund, error) {
+	rows, err := q.db.QueryContext(ctx, ListAllRefunds, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -503,8 +503,8 @@ type ListChargesParams struct {
 	Offset     int32  `json:"offset"`
 }
 
-func (q *Queries) ListCharges(ctx context.Context, db DBTX, arg ListChargesParams) ([]Charge, error) {
-	rows, err := db.QueryContext(ctx, ListCharges, arg.CustomerID, arg.Limit, arg.Offset)
+func (q *Queries) ListCharges(ctx context.Context, arg ListChargesParams) ([]Charge, error) {
+	rows, err := q.db.QueryContext(ctx, ListCharges, arg.CustomerID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -548,8 +548,8 @@ type ListCustomersParams struct {
 	Offset int32 `json:"offset"`
 }
 
-func (q *Queries) ListCustomers(ctx context.Context, db DBTX, arg ListCustomersParams) ([]Customer, error) {
-	rows, err := db.QueryContext(ctx, ListCustomers, arg.Limit, arg.Offset)
+func (q *Queries) ListCustomers(ctx context.Context, arg ListCustomersParams) ([]Customer, error) {
+	rows, err := q.db.QueryContext(ctx, ListCustomers, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -586,8 +586,8 @@ WHERE customer_id = $1
 ORDER BY created_at DESC
 `
 
-func (q *Queries) ListPaymentMethods(ctx context.Context, db DBTX, customerID string) ([]PaymentMethod, error) {
-	rows, err := db.QueryContext(ctx, ListPaymentMethods, customerID)
+func (q *Queries) ListPaymentMethods(ctx context.Context, customerID string) ([]PaymentMethod, error) {
+	rows, err := q.db.QueryContext(ctx, ListPaymentMethods, customerID)
 	if err != nil {
 		return nil, err
 	}
@@ -633,8 +633,8 @@ type ListRefundsParams struct {
 	Offset   int32  `json:"offset"`
 }
 
-func (q *Queries) ListRefunds(ctx context.Context, db DBTX, arg ListRefundsParams) ([]Refund, error) {
-	rows, err := db.QueryContext(ctx, ListRefunds, arg.ChargeID, arg.Limit, arg.Offset)
+func (q *Queries) ListRefunds(ctx context.Context, arg ListRefundsParams) ([]Refund, error) {
+	rows, err := q.db.QueryContext(ctx, ListRefunds, arg.ChargeID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -678,8 +678,8 @@ type UpdateChargeStatusParams struct {
 	Status string `json:"status"`
 }
 
-func (q *Queries) UpdateChargeStatus(ctx context.Context, db DBTX, arg UpdateChargeStatusParams) (Charge, error) {
-	row := db.QueryRowContext(ctx, UpdateChargeStatus, arg.ID, arg.Status)
+func (q *Queries) UpdateChargeStatus(ctx context.Context, arg UpdateChargeStatusParams) (Charge, error) {
+	row := q.db.QueryRowContext(ctx, UpdateChargeStatus, arg.ID, arg.Status)
 	var i Charge
 	err := row.Scan(
 		&i.ID,
@@ -712,8 +712,8 @@ type UpdateCustomerParams struct {
 	Metadata    pqtype.NullRawMessage `json:"metadata"`
 }
 
-func (q *Queries) UpdateCustomer(ctx context.Context, db DBTX, arg UpdateCustomerParams) (Customer, error) {
-	row := db.QueryRowContext(ctx, UpdateCustomer,
+func (q *Queries) UpdateCustomer(ctx context.Context, arg UpdateCustomerParams) (Customer, error) {
+	row := q.db.QueryRowContext(ctx, UpdateCustomer,
 		arg.ID,
 		arg.Email,
 		arg.Name,
@@ -747,8 +747,8 @@ type UpdateRefundStatusParams struct {
 	Status string `json:"status"`
 }
 
-func (q *Queries) UpdateRefundStatus(ctx context.Context, db DBTX, arg UpdateRefundStatusParams) (Refund, error) {
-	row := db.QueryRowContext(ctx, UpdateRefundStatus, arg.ID, arg.Status)
+func (q *Queries) UpdateRefundStatus(ctx context.Context, arg UpdateRefundStatusParams) (Refund, error) {
+	row := q.db.QueryRowContext(ctx, UpdateRefundStatus, arg.ID, arg.Status)
 	var i Refund
 	err := row.Scan(
 		&i.ID,
