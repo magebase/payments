@@ -8,6 +8,7 @@ A modern, scalable payments service built with Go, Go Fiber, and Stripe integrat
 - **Payment Methods**: Add, list, and manage payment methods for customers
 - **Charges**: Process payments with comprehensive validation and error handling
 - **Refunds**: Process refunds with support for partial refunds and reason tracking
+- **Disputes**: Handle payment disputes with comprehensive status tracking and evidence management
 - **RESTful API**: Clean, RESTful endpoints with proper HTTP status codes
 - **Validation**: Request validation using go-playground/validator
 - **Tracing**: OpenTelemetry integration for observability
@@ -66,6 +67,13 @@ The service follows a clean architecture pattern with:
 - `GET /api/v1/refunds/:id` - Get refund by ID
 - `GET /api/v1/refunds` - List refunds for a specific charge
 
+### Disputes
+
+- `POST /api/v1/disputes` - Create a dispute for a charge
+- `GET /api/v1/disputes/:id` - Get dispute by ID
+- `GET /api/v1/disputes` - List disputes for a specific charge
+- `PUT /api/v1/disputes/:id/status` - Update dispute status
+
 ## API Usage Examples
 
 ### Creating a Refund
@@ -93,6 +101,44 @@ curl http://localhost:8080/api/v1/refunds/re_1234567890
 
 ```bash
 curl "http://localhost:8080/api/v1/refunds?charge_id=ch_1234567890"
+```
+
+### Creating a Dispute
+
+```bash
+curl -X POST http://localhost:8080/api/v1/disputes \
+  -H "Content-Type: application/json" \
+  -d '{
+    "charge_id": "ch_1234567890",
+    "amount": 1000,
+    "reason": "fraudulent",
+    "evidence": {
+      "customer_email": "customer@example.com",
+      "note": "Suspicious transaction"
+    }
+  }'
+```
+
+### Getting a Dispute
+
+```bash
+curl http://localhost:8080/api/v1/disputes/dp_1234567890
+```
+
+### Listing Disputes for a Charge
+
+```bash
+curl "http://localhost:8080/api/v1/disputes?charge_id=ch_1234567890"
+```
+
+### Updating Dispute Status
+
+```bash
+curl -X PUT http://localhost:8080/api/v1/disputes/dp_1234567890/status \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "won"
+  }'
 ```
 
 ## Getting Started

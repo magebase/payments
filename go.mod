@@ -46,6 +46,7 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
+	github.com/sqlc-dev/pqtype v0.3.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.62.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
