@@ -318,7 +318,7 @@ func (a *App) getCharge(c *fiber.Ctx) error {
 // listCharges handles listing charges
 func (a *App) listCharges(c *fiber.Ctx) error {
 	customerID := c.Query("customer_id")
-	
+
 	charges, err := a.chargeService.ListCharges(c.Context(), customerID, 0)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -375,7 +375,7 @@ func (a *App) listRefunds(c *fiber.Ctx) error {
 			"error": "Charge ID is required",
 		})
 	}
-	
+
 	refunds, err := a.refundService.ListRefunds(c.Context(), chargeID, 100)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -459,7 +459,7 @@ func main() {
 
 	// Create and run the application
 	app := NewApp()
-	
+
 	log.Printf("Starting Payments API server on port %s", port)
 	if err := app.Run(port); err != nil {
 		log.Fatalf("Failed to run application: %v", err)

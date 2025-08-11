@@ -32,15 +32,15 @@ type RefundRequest struct {
 
 // Refund represents a Stripe refund
 type Refund struct {
-	ID          string            `json:"id"`
-	ChargeID    string            `json:"charge_id"`
-	Amount      int64             `json:"amount"`
-	Currency    string            `json:"currency"`
-	Status      string            `json:"status"`
-	Reason      string            `json:"reason,omitempty"`
-	Metadata    map[string]string `json:"metadata,omitempty"`
-	CreatedAt   time.Time         `json:"created_at"`
-	UpdatedAt   time.Time         `json:"updated_at"`
+	ID        string            `json:"id"`
+	ChargeID  string            `json:"charge_id"`
+	Amount    int64             `json:"amount"`
+	Currency  string            `json:"currency"`
+	Status    string            `json:"status"`
+	Reason    string            `json:"reason,omitempty"`
+	Metadata  map[string]string `json:"metadata,omitempty"`
+	CreatedAt time.Time         `json:"created_at"`
+	UpdatedAt time.Time         `json:"updated_at"`
 }
 
 // CreateRefund creates a new refund using Stripe
@@ -138,7 +138,7 @@ func (s *RefundService) ListRefunds(ctx context.Context, chargeID string, limit 
 
 	for iter.Next() {
 		stripeRefund := iter.Refund()
-		
+
 		// Convert to our Refund type
 		refund := &Refund{
 			ID:        stripeRefund.ID,
@@ -151,7 +151,7 @@ func (s *RefundService) ListRefunds(ctx context.Context, chargeID string, limit 
 			CreatedAt: time.Unix(stripeRefund.Created, 0),
 			UpdatedAt: time.Unix(stripeRefund.Created, 0),
 		}
-		
+
 		refunds = append(refunds, refund)
 	}
 
