@@ -5,7 +5,6 @@ go 1.23.0
 toolchain go1.23.12
 
 require (
-	apis/billing/sdk v0.0.0-00010101000000-000000000000
 	github.com/ClickHouse/clickhouse-go/v2 v2.40.1
 	github.com/go-playground/validator/v10 v10.26.0
 	github.com/gofiber/fiber/v2 v2.52.9
@@ -64,5 +63,3 @@ require (
 	google.golang.org/protobuf v1.36.6 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace apis/billing/sdk => ../billing/sdk
