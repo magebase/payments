@@ -8,6 +8,7 @@ A modern, scalable payments service built with Go, Go Fiber, and Stripe integrat
 - **Payment Methods**: Add, list, and manage payment methods for customers
 - **Charges**: Process payments with comprehensive validation and error handling
 - **Refunds**: Process refunds with support for partial refunds and reason tracking
+- **Disputes**: Handle payment disputes with comprehensive status tracking and evidence management
 - **RESTful API**: Clean, RESTful endpoints with proper HTTP status codes
 - **Validation**: Request validation using go-playground/validator
 - **Tracing**: OpenTelemetry integration for observability
@@ -37,29 +38,41 @@ The service follows a clean architecture pattern with:
 ## API Endpoints
 
 ### Health Check
+
 - `GET /health` - Service health status
 
 ### Customers
+
 - `POST /api/v1/customers` - Create a new customer
 - `GET /api/v1/customers/:id` - Get customer by ID
 - `PUT /api/v1/customers/:id` - Update customer
 - `DELETE /api/v1/customers/:id` - Delete customer
 
 ### Payment Methods
+
 - `POST /api/v1/customers/:customerId/payment-methods` - Add payment method
 - `GET /api/v1/customers/:customerId/payment-methods` - List payment methods
 - `GET /api/v1/customers/:customerId/payment-methods/:id` - Get payment method
 - `DELETE /api/v1/customers/:customerId/payment-methods/:id` - Remove payment method
 
 ### Charges
+
 - `POST /api/v1/charges` - Create a charge
 - `GET /api/v1/charges/:id` - Get charge by ID
 - `GET /api/v1/charges` - List charges (with optional customer filter)
 
 ### Refunds
+
 - `POST /api/v1/refunds` - Create a refund for a charge
 - `GET /api/v1/refunds/:id` - Get refund by ID
 - `GET /api/v1/refunds` - List refunds for a specific charge
+
+### Disputes
+
+- `POST /api/v1/disputes` - Create a dispute for a charge
+- `GET /api/v1/disputes/:id` - Get dispute by ID
+- `GET /api/v1/disputes` - List disputes for a specific charge
+- `PUT /api/v1/disputes/:id/status` - Update dispute status
 
 ## API Usage Examples
 
@@ -90,6 +103,44 @@ curl http://localhost:8080/api/v1/refunds/re_1234567890
 curl "http://localhost:8080/api/v1/refunds?charge_id=ch_1234567890"
 ```
 
+### Creating a Dispute
+
+```bash
+curl -X POST http://localhost:8080/api/v1/disputes \
+  -H "Content-Type: application/json" \
+  -d '{
+    "charge_id": "ch_1234567890",
+    "amount": 1000,
+    "reason": "fraudulent",
+    "evidence": {
+      "customer_email": "customer@example.com",
+      "note": "Suspicious transaction"
+    }
+  }'
+```
+
+### Getting a Dispute
+
+```bash
+curl http://localhost:8080/api/v1/disputes/dp_1234567890
+```
+
+### Listing Disputes for a Charge
+
+```bash
+curl "http://localhost:8080/api/v1/disputes?charge_id=ch_1234567890"
+```
+
+### Updating Dispute Status
+
+```bash
+curl -X PUT http://localhost:8080/api/v1/disputes/dp_1234567890/status \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "won"
+  }'
+```
+
 ## Getting Started
 
 ### Prerequisites
@@ -102,23 +153,27 @@ curl "http://localhost:8080/api/v1/refunds?charge_id=ch_1234567890"
 ### Installation
 
 1. Clone the repository:
+
 ```bash
 git clone <repository-url>
 cd payments
 ```
 
 2. Install dependencies:
+
 ```bash
 go mod tidy
 ```
 
 3. Set up environment variables:
+
 ```bash
 cp env.example .env
 # Edit .env with your actual values
 ```
 
 4. Set your Stripe API keys:
+
 ```bash
 export STRIPE_SECRET_KEY=sk_test_your_key_here
 export STRIPE_PUBLISHABLE_KEY=pk_test_your_key_here
@@ -127,11 +182,13 @@ export STRIPE_PUBLISHABLE_KEY=pk_test_your_key_here
 ### Running the Service
 
 #### Development
+
 ```bash
 go run main/main.go
 ```
 
 #### Production
+
 ```bash
 go build -o payments main/main.go
 ./payments
@@ -265,6 +322,7 @@ The service integrates with OpenTelemetry for distributed tracing. When enabled,
 ### Logging
 
 Structured logging is provided via Go Fiber's logger middleware, including:
+
 - Request/response logging
 - Error logging
 - Performance metrics

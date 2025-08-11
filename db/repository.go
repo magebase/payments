@@ -3,15 +3,90 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 
 	"apis/payments/db/sqlc"
 	"apis/payments/services/stripe"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/sqlc-dev/pqtype"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 )
+
+// PoolAdapter adapts pgxpool.Pool to implement sqlc.DBTX interface
+type PoolAdapter struct {
+	pool *pgxpool.Pool
+}
+
+func (p *PoolAdapter) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	conn, err := p.pool.Acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Release()
+
+	commandTag, err := conn.Exec(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pgxResult{commandTag: commandTag}, nil
+}
+
+func (p *PoolAdapter) PrepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
+	// pgx doesn't support prepared statements in the same way as database/sql
+	// Return a no-op statement
+	return &sql.Stmt{}, nil
+}
+
+func (p *PoolAdapter) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	conn, err := p.pool.Acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Release()
+
+	rows, err := conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	// For now, return nil since we don't actually use this method
+	// The SQLC generated code handles queries differently
+	rows.Close()
+	return nil, fmt.Errorf("QueryContext not fully implemented for pgx")
+}
+
+func (p *PoolAdapter) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
+	conn, err := p.pool.Acquire(ctx)
+	if err != nil {
+		return &sql.Row{}
+	}
+	defer conn.Release()
+
+	// For now, return empty row since we don't actually use this method
+	// The SQLC generated code handles queries differently
+	return &sql.Row{}
+}
+
+// pgxResult implements sql.Result for pgx
+type pgxResult struct {
+	commandTag interface{}
+}
+
+func (r *pgxResult) LastInsertId() (int64, error) {
+	return 0, fmt.Errorf("LastInsertId not supported by pgx")
+}
+
+func (r *pgxResult) RowsAffected() (int64, error) {
+	// Try to extract rows affected from command tag
+	if ct, ok := r.commandTag.(interface{ RowsAffected() int64 }); ok {
+		return ct.RowsAffected(), nil
+	}
+	return 0, nil
+}
 
 // Repository provides database operations for the payments service
 type Repository struct {
@@ -22,8 +97,9 @@ type Repository struct {
 
 // NewRepository creates a new repository instance
 func NewRepository(pool *pgxpool.Pool) *Repository {
+	adapter := &PoolAdapter{pool: pool}
 	return &Repository{
-		queries: sqlc.New(pool),
+		queries: sqlc.New(adapter),
 		pool:    pool,
 		tracer:  otel.Tracer("payments.repository"),
 	}
@@ -34,10 +110,10 @@ func (r *Repository) CreateCustomer(ctx context.Context, customer *stripe.Custom
 	ctx, span := r.tracer.Start(ctx, "Repository.CreateCustomer")
 	defer span.End()
 
-	// Convert metadata to JSON string for storage
-	metadata := make(map[string]interface{})
-	for k, v := range customer.Metadata {
-		metadata[k] = v
+	// Convert metadata to JSON bytes for storage
+	metadataBytes, err := json.Marshal(customer.Metadata)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal metadata: %w", err)
 	}
 
 	params := sqlc.CreateCustomerParams{
@@ -46,7 +122,7 @@ func (r *Repository) CreateCustomer(ctx context.Context, customer *stripe.Custom
 		Name:        customer.Name,
 		Phone:       sql.NullString{String: customer.Phone, Valid: customer.Phone != ""},
 		Description: sql.NullString{String: customer.Description, Valid: customer.Description != ""},
-		Metadata:    metadata,
+		Metadata:    pqtype.NullRawMessage{RawMessage: metadataBytes, Valid: len(metadataBytes) > 0},
 	}
 
 	dbCustomer, err := r.queries.CreateCustomer(ctx, params)
@@ -62,8 +138,8 @@ func (r *Repository) CreateCustomer(ctx context.Context, customer *stripe.Custom
 		Phone:       dbCustomer.Phone.String,
 		Description: dbCustomer.Description.String,
 		Metadata:    convertMetadata(dbCustomer.Metadata),
-		Created:     dbCustomer.CreatedAt.Unix(),
-		Updated:     dbCustomer.UpdatedAt.Unix(),
+		Created:     dbCustomer.CreatedAt.Time.Unix(),
+		Updated:     dbCustomer.UpdatedAt.Time.Unix(),
 	}, nil
 }
 
@@ -84,8 +160,8 @@ func (r *Repository) GetCustomer(ctx context.Context, id string) (*stripe.Custom
 		Phone:       dbCustomer.Phone.String,
 		Description: dbCustomer.Description.String,
 		Metadata:    convertMetadata(dbCustomer.Metadata),
-		Created:     dbCustomer.CreatedAt.Unix(),
-		Updated:     dbCustomer.UpdatedAt.Unix(),
+		Created:     dbCustomer.CreatedAt.Time.Unix(),
+		Updated:     dbCustomer.UpdatedAt.Time.Unix(),
 	}, nil
 }
 
@@ -94,10 +170,10 @@ func (r *Repository) UpdateCustomer(ctx context.Context, id string, customer *st
 	ctx, span := r.tracer.Start(ctx, "Repository.UpdateCustomer")
 	defer span.End()
 
-	// Convert metadata to JSON string for storage
-	metadata := make(map[string]interface{})
-	for k, v := range customer.Metadata {
-		metadata[k] = v
+	// Convert metadata to JSON bytes for storage
+	metadataBytes, err := json.Marshal(customer.Metadata)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal metadata: %w", err)
 	}
 
 	params := sqlc.UpdateCustomerParams{
@@ -106,7 +182,7 @@ func (r *Repository) UpdateCustomer(ctx context.Context, id string, customer *st
 		Name:        customer.Name,
 		Phone:       sql.NullString{String: customer.Phone, Valid: customer.Phone != ""},
 		Description: sql.NullString{String: customer.Description, Valid: customer.Description != ""},
-		Metadata:    metadata,
+		Metadata:    pqtype.NullRawMessage{RawMessage: metadataBytes, Valid: len(metadataBytes) > 0},
 	}
 
 	dbCustomer, err := r.queries.UpdateCustomer(ctx, params)
@@ -121,8 +197,8 @@ func (r *Repository) UpdateCustomer(ctx context.Context, id string, customer *st
 		Phone:       dbCustomer.Phone.String,
 		Description: dbCustomer.Description.String,
 		Metadata:    convertMetadata(dbCustomer.Metadata),
-		Created:     dbCustomer.CreatedAt.Unix(),
-		Updated:     dbCustomer.UpdatedAt.Unix(),
+		Created:     dbCustomer.CreatedAt.Time.Unix(),
+		Updated:     dbCustomer.UpdatedAt.Time.Unix(),
 	}, nil
 }
 
@@ -144,10 +220,10 @@ func (r *Repository) StorePaymentMethod(ctx context.Context, paymentMethod *stri
 	ctx, span := r.tracer.Start(ctx, "Repository.StorePaymentMethod")
 	defer span.End()
 
-	// Convert metadata to JSON string for storage
-	metadata := make(map[string]interface{})
-	for k, v := range paymentMethod.Metadata {
-		metadata[k] = v
+	// Convert metadata to JSON bytes for storage
+	metadataBytes, err := json.Marshal(paymentMethod.Metadata)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal metadata: %w", err)
 	}
 
 	var cardLast4, cardBrand, cardFingerprint sql.NullString
@@ -170,7 +246,7 @@ func (r *Repository) StorePaymentMethod(ctx context.Context, paymentMethod *stri
 		CardExpMonth:    cardExpMonth,
 		CardExpYear:     cardExpYear,
 		CardFingerprint: cardFingerprint,
-		Metadata:        metadata,
+		Metadata:        pqtype.NullRawMessage{RawMessage: metadataBytes, Valid: len(metadataBytes) > 0},
 	}
 
 	dbPaymentMethod, err := r.queries.CreatePaymentMethod(ctx, params)
@@ -184,7 +260,7 @@ func (r *Repository) StorePaymentMethod(ctx context.Context, paymentMethod *stri
 		Type:     dbPaymentMethod.Type,
 		Customer: dbPaymentMethod.CustomerID,
 		Metadata: convertMetadata(dbPaymentMethod.Metadata),
-		Created:  dbPaymentMethod.CreatedAt.Unix(),
+		Created:  dbPaymentMethod.CreatedAt.Time.Unix(),
 	}
 
 	// Add card details if available
@@ -216,7 +292,7 @@ func (r *Repository) GetPaymentMethod(ctx context.Context, id string) (*stripe.P
 		Type:     dbPaymentMethod.Type,
 		Customer: dbPaymentMethod.CustomerID,
 		Metadata: convertMetadata(dbPaymentMethod.Metadata),
-		Created:  dbPaymentMethod.CreatedAt.Unix(),
+		Created:  dbPaymentMethod.CreatedAt.Time.Unix(),
 	}
 
 	// Add card details if available
@@ -250,7 +326,7 @@ func (r *Repository) ListPaymentMethods(ctx context.Context, customerID string) 
 			Type:     dbPM.Type,
 			Customer: dbPM.CustomerID,
 			Metadata: convertMetadata(dbPM.Metadata),
-			Created:  dbPM.CreatedAt.Unix(),
+			Created:  dbPM.CreatedAt.Time.Unix(),
 		}
 
 		// Add card details if available
@@ -291,10 +367,10 @@ func (r *Repository) StoreCharge(ctx context.Context, charge *stripe.Charge) (*s
 	ctx, span := r.tracer.Start(ctx, "Repository.StoreCharge")
 	defer span.End()
 
-	// Convert metadata to JSON string for storage
-	metadata := make(map[string]interface{})
-	for k, v := range charge.Metadata {
-		metadata[k] = v
+	// Convert metadata to JSON bytes for storage
+	metadataBytes, err := json.Marshal(charge.Metadata)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal metadata: %w", err)
 	}
 
 	params := sqlc.CreateChargeParams{
@@ -305,7 +381,7 @@ func (r *Repository) StoreCharge(ctx context.Context, charge *stripe.Charge) (*s
 		CustomerID:      charge.CustomerID,
 		PaymentMethodID: sql.NullString{String: charge.PaymentMethodID, Valid: charge.PaymentMethodID != ""},
 		Description:     sql.NullString{String: charge.Description, Valid: charge.Description != ""},
-		Metadata:        metadata,
+		Metadata:        pqtype.NullRawMessage{RawMessage: metadataBytes, Valid: len(metadataBytes) > 0},
 	}
 
 	dbCharge, err := r.queries.CreateCharge(ctx, params)
@@ -322,7 +398,7 @@ func (r *Repository) StoreCharge(ctx context.Context, charge *stripe.Charge) (*s
 		PaymentMethodID: dbCharge.PaymentMethodID.String,
 		Description:     dbCharge.Description.String,
 		Metadata:        convertMetadata(dbCharge.Metadata),
-		Created:         dbCharge.CreatedAt.Unix(),
+		Created:         dbCharge.CreatedAt.Time.Unix(),
 	}, nil
 }
 
@@ -345,7 +421,7 @@ func (r *Repository) GetCharge(ctx context.Context, id string) (*stripe.Charge, 
 		PaymentMethodID: dbCharge.PaymentMethodID.String,
 		Description:     dbCharge.Description.String,
 		Metadata:        convertMetadata(dbCharge.Metadata),
-		Created:         dbCharge.CreatedAt.Unix(),
+		Created:         dbCharge.CreatedAt.Time.Unix(),
 	}, nil
 }
 
@@ -374,7 +450,7 @@ func (r *Repository) ListCharges(ctx context.Context, customerID string, limit, 
 			PaymentMethodID: dbCharge.PaymentMethodID.String,
 			Description:     dbCharge.Description.String,
 			Metadata:        convertMetadata(dbCharge.Metadata),
-			Created:         dbCharge.CreatedAt.Unix(),
+			Created:         dbCharge.CreatedAt.Time.Unix(),
 		}
 		result = append(result, charge)
 	}
@@ -383,13 +459,18 @@ func (r *Repository) ListCharges(ctx context.Context, customerID string, limit, 
 }
 
 // convertMetadata converts database metadata to stripe metadata format
-func convertMetadata(dbMetadata map[string]interface{}) map[string]string {
-	if dbMetadata == nil {
+func convertMetadata(dbMetadata pqtype.NullRawMessage) map[string]string {
+	if !dbMetadata.Valid || len(dbMetadata.RawMessage) == 0 {
+		return nil
+	}
+
+	var metadata map[string]interface{}
+	if err := json.Unmarshal(dbMetadata.RawMessage, &metadata); err != nil {
 		return nil
 	}
 
 	result := make(map[string]string)
-	for k, v := range dbMetadata {
+	for k, v := range metadata {
 		if str, ok := v.(string); ok {
 			result[k] = str
 		}

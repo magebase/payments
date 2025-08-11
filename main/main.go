@@ -28,6 +28,8 @@ type App struct {
 	customerService *stripe.CustomerService
 	chargeService   *stripe.ChargeService
 	refundService   *stripe.RefundService
+	disputeService  *stripe.DisputeService
+	webhookService  *stripe.WebhookService
 }
 
 // NewApp creates a new application instance
@@ -36,6 +38,14 @@ func NewApp() *App {
 	customerService := stripe.NewCustomerService()
 	chargeService := stripe.NewChargeService()
 	refundService := stripe.NewRefundService()
+	disputeService := stripe.NewDisputeService()
+	
+	// Initialize webhook service with secret from environment
+	webhookSecret := os.Getenv("STRIPE_WEBHOOK_SECRET")
+	if webhookSecret == "" {
+		webhookSecret = "whsec_test_secret" // Default for testing
+	}
+	webhookService := stripe.NewWebhookService(webhookSecret)
 
 	// Create Fiber app
 	fiberApp := fiber.New(fiber.Config{
@@ -60,6 +70,8 @@ func NewApp() *App {
 		customerService: customerService,
 		chargeService:   chargeService,
 		refundService:   refundService,
+		disputeService:  disputeService,
+		webhookService:  webhookService,
 	}
 
 	app.registerRoutes()
@@ -106,6 +118,17 @@ func (a *App) registerRoutes() {
 	refunds.Post("/", a.createRefund)
 	refunds.Get("/:id", a.getRefund)
 	refunds.Get("/", a.listRefunds)
+
+	// Dispute routes
+	disputes := api.Group("/disputes")
+	disputes.Post("/", a.createDispute)
+	disputes.Get("/:id", a.getDispute)
+	disputes.Get("/", a.listDisputes)
+	disputes.Put("/:id/status", a.updateDisputeStatus)
+	
+	// Webhook routes
+	webhooks := api.Group("/webhooks")
+	webhooks.Post("/stripe", a.handleStripeWebhook)
 }
 
 // createCustomer handles customer creation
@@ -318,7 +341,7 @@ func (a *App) getCharge(c *fiber.Ctx) error {
 // listCharges handles listing charges
 func (a *App) listCharges(c *fiber.Ctx) error {
 	customerID := c.Query("customer_id")
-	
+
 	charges, err := a.chargeService.ListCharges(c.Context(), customerID, 0)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -375,7 +398,7 @@ func (a *App) listRefunds(c *fiber.Ctx) error {
 			"error": "Charge ID is required",
 		})
 	}
-	
+
 	refunds, err := a.refundService.ListRefunds(c.Context(), chargeID, 100)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -384,6 +407,120 @@ func (a *App) listRefunds(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(refunds)
+}
+
+// createDispute handles dispute creation
+func (a *App) createDispute(c *fiber.Ctx) error {
+	var request stripe.DisputeRequest
+	if err := c.BodyParser(&request); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	dispute, err := a.disputeService.CreateDispute(c.Context(), &request)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(dispute)
+}
+
+// getDispute handles dispute retrieval
+func (a *App) getDispute(c *fiber.Ctx) error {
+	disputeID := c.Params("id")
+	if disputeID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Dispute ID is required",
+		})
+	}
+
+	dispute, err := a.disputeService.GetDispute(c.Context(), disputeID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(dispute)
+}
+
+// listDisputes handles listing disputes
+func (a *App) listDisputes(c *fiber.Ctx) error {
+	chargeID := c.Query("charge_id")
+	if chargeID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Charge ID is required",
+		})
+	}
+
+	disputes, err := a.disputeService.ListDisputes(c.Context(), chargeID, 100)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(disputes)
+}
+
+// updateDisputeStatus handles dispute status updates
+func (a *App) updateDisputeStatus(c *fiber.Ctx) error {
+	disputeID := c.Params("id")
+	if disputeID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Dispute ID is required",
+		})
+	}
+
+	var request struct {
+		Status string `json:"status"`
+	}
+	if err := c.BodyParser(&request); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	if request.Status == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Status is required",
+		})
+	}
+
+	dispute, err := a.disputeService.UpdateDisputeStatus(c.Context(), disputeID, request.Status)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(dispute)
+}
+
+// handleStripeWebhook handles Stripe webhook events
+func (a *App) handleStripeWebhook(c *fiber.Ctx) error {
+	// Parse the webhook request
+	webhookReq, err := a.webhookService.ParseWebhookRequest(c)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Process the webhook
+	if err := a.webhookService.ProcessWebhook(c.Context(), webhookReq); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Return success
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"status": "webhook processed successfully",
+	})
 }
 
 // Run starts the application
@@ -459,7 +596,7 @@ func main() {
 
 	// Create and run the application
 	app := NewApp()
-	
+
 	log.Printf("Starting Payments API server on port %s", port)
 	if err := app.Run(port); err != nil {
 		log.Fatalf("Failed to run application: %v", err)
