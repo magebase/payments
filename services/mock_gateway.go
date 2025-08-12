@@ -8,21 +8,21 @@ import (
 
 // MockGateway is a mock implementation of PaymentGateway for testing
 type MockGateway struct {
-	customers     map[string]*Customer
+	customers      map[string]*Customer
 	paymentMethods map[string]*PaymentMethod
-	charges       map[string]*Charge
-	refunds       map[string]*Refund
-	disputes      map[string]*Dispute
+	charges        map[string]*Charge
+	refunds        map[string]*Refund
+	disputes       map[string]*Dispute
 }
 
 // NewMockGateway creates a new mock gateway for testing
 func NewMockGateway() *MockGateway {
 	return &MockGateway{
-		customers:     make(map[string]*Customer),
+		customers:      make(map[string]*Customer),
 		paymentMethods: make(map[string]*PaymentMethod),
-		charges:       make(map[string]*Charge),
-		refunds:       make(map[string]*Refund),
-		disputes:      make(map[string]*Dispute),
+		charges:        make(map[string]*Charge),
+		refunds:        make(map[string]*Refund),
+		disputes:       make(map[string]*Dispute),
 	}
 }
 
@@ -39,7 +39,7 @@ func (m *MockGateway) CreateCustomer(ctx context.Context, req *CustomerRequest) 
 		Updated:     time.Now().Unix(),
 		ProviderID:  "cus_mock",
 	}
-	
+
 	m.customers[customer.ID] = customer
 	return customer, nil
 }
@@ -82,7 +82,7 @@ func (m *MockGateway) AddPaymentMethod(ctx context.Context, req *PaymentMethodRe
 		Created:    time.Now().Unix(),
 		ProviderID: "pm_mock",
 	}
-	
+
 	if req.Card != nil {
 		paymentMethod.Card = &Card{
 			Last4:       "1234",
@@ -92,7 +92,7 @@ func (m *MockGateway) AddPaymentMethod(ctx context.Context, req *PaymentMethodRe
 			Fingerprint: "mock_fingerprint",
 		}
 	}
-	
+
 	m.paymentMethods[paymentMethod.ID] = paymentMethod
 	return paymentMethod, nil
 }
@@ -137,7 +137,7 @@ func (m *MockGateway) CreateCharge(ctx context.Context, req *ChargeRequest) (*Ch
 		Updated:         time.Now().Unix(),
 		ProviderID:      "ch_mock",
 	}
-	
+
 	m.charges[charge.ID] = charge
 	return charge, nil
 }
@@ -173,7 +173,7 @@ func (m *MockGateway) CreateRefund(ctx context.Context, req *RefundRequest) (*Re
 		Updated:    time.Now().Unix(),
 		ProviderID: "re_mock",
 	}
-	
+
 	m.refunds[refund.ID] = refund
 	return refund, nil
 }
@@ -210,7 +210,7 @@ func (m *MockGateway) CreateDispute(ctx context.Context, req *DisputeRequest) (*
 		Updated:    time.Now().Unix(),
 		ProviderID: "dp_mock",
 	}
-	
+
 	m.disputes[dispute.ID] = dispute
 	return dispute, nil
 }

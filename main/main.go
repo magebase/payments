@@ -27,10 +27,10 @@ import (
 
 // App represents the main application
 type App struct {
-	fiberApp        *fiber.App
-	paymentService  *services.PaymentService
-	webhookService  *stripe.WebhookService
-	eventPublisher  kafka.EventPublisher
+	fiberApp       *fiber.App
+	paymentService *services.PaymentService
+	webhookService *stripe.WebhookService
+	eventPublisher kafka.EventPublisher
 }
 
 // NewApp creates a new application instance

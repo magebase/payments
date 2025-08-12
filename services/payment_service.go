@@ -139,10 +139,10 @@ func (s *PaymentService) CreateCharge(ctx context.Context, req *ChargeRequest) (
 	charge, err := s.gateway.CreateCharge(ctx, req)
 	if err == nil && charge != nil {
 		s.publishEvent("charge.created", "/payments/charges", map[string]interface{}{
-			"charge_id": charge.ID,
-			"amount":    charge.Amount,
-			"currency":  charge.Currency,
-			"status":    charge.Status,
+			"charge_id":   charge.ID,
+			"amount":      charge.Amount,
+			"currency":    charge.Currency,
+			"status":      charge.Status,
 			"customer_id": charge.CustomerID,
 		})
 	}
