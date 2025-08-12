@@ -6,9 +6,12 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
+	"apis/payments/kafka"
+	"apis/payments/services"
 	"apis/payments/services/stripe"
 
 	"github.com/gofiber/fiber/v2"
@@ -25,27 +28,41 @@ import (
 // App represents the main application
 type App struct {
 	fiberApp        *fiber.App
-	customerService *stripe.CustomerService
-	chargeService   *stripe.ChargeService
-	refundService   *stripe.RefundService
-	disputeService  *stripe.DisputeService
+	paymentService  *services.PaymentService
 	webhookService  *stripe.WebhookService
+	eventPublisher  kafka.EventPublisher
 }
 
 // NewApp creates a new application instance
-func NewApp() *App {
-	// Initialize services
-	customerService := stripe.NewCustomerService()
-	chargeService := stripe.NewChargeService()
-	refundService := stripe.NewRefundService()
-	disputeService := stripe.NewDisputeService()
-	
+func NewApp() (*App, error) {
+	// Initialize payment service
+	paymentService, err := services.NewPaymentService()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create payment service: %w", err)
+	}
+
 	// Initialize webhook service with secret from environment
 	webhookSecret := os.Getenv("STRIPE_WEBHOOK_SECRET")
 	if webhookSecret == "" {
 		webhookSecret = "whsec_test_secret" // Default for testing
 	}
 	webhookService := stripe.NewWebhookService(webhookSecret)
+
+	// Initialize Kafka event publisher if configured
+	var eventPublisher kafka.EventPublisher
+	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
+	kafkaTopic := os.Getenv("KAFKA_TOPIC")
+	if kafkaBrokers != "" && kafkaTopic != "" {
+		brokers := strings.Split(kafkaBrokers, ",")
+		producer, err := kafka.NewKafkaProducer(brokers, kafkaTopic)
+		if err != nil {
+			log.Printf("Warning: Failed to create Kafka producer: %v", err)
+		} else {
+			eventPublisher = producer
+			paymentService.SetEventPublisher(producer)
+			log.Printf("Kafka integration enabled with brokers: %v, topic: %s", brokers, kafkaTopic)
+		}
+	}
 
 	// Create Fiber app
 	fiberApp := fiber.New(fiber.Config{
@@ -66,17 +83,15 @@ func NewApp() *App {
 
 	// Register routes
 	app := &App{
-		fiberApp:        fiberApp,
-		customerService: customerService,
-		chargeService:   chargeService,
-		refundService:   refundService,
-		disputeService:  disputeService,
-		webhookService:  webhookService,
+		fiberApp:       fiberApp,
+		paymentService: paymentService,
+		webhookService: webhookService,
+		eventPublisher: eventPublisher,
 	}
 
 	app.registerRoutes()
 
-	return app
+	return app, nil
 }
 
 // registerRoutes registers all API routes
@@ -125,7 +140,7 @@ func (a *App) registerRoutes() {
 	disputes.Get("/:id", a.getDispute)
 	disputes.Get("/", a.listDisputes)
 	disputes.Put("/:id/status", a.updateDisputeStatus)
-	
+
 	// Webhook routes
 	webhooks := api.Group("/webhooks")
 	webhooks.Post("/stripe", a.handleStripeWebhook)
@@ -133,14 +148,14 @@ func (a *App) registerRoutes() {
 
 // createCustomer handles customer creation
 func (a *App) createCustomer(c *fiber.Ctx) error {
-	var request stripe.CustomerRequest
+	var request services.CustomerRequest
 	if err := c.BodyParser(&request); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid request body",
 		})
 	}
 
-	customer, err := a.customerService.CreateCustomer(c.Context(), &request)
+	customer, err := a.paymentService.CreateCustomer(c.Context(), &request)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": err.Error(),
@@ -159,7 +174,7 @@ func (a *App) getCustomer(c *fiber.Ctx) error {
 		})
 	}
 
-	customer, err := a.customerService.GetCustomer(c.Context(), customerID)
+	customer, err := a.paymentService.GetCustomer(c.Context(), customerID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": err.Error(),
@@ -178,14 +193,14 @@ func (a *App) updateCustomer(c *fiber.Ctx) error {
 		})
 	}
 
-	var request stripe.CustomerRequest
+	var request services.CustomerRequest
 	if err := c.BodyParser(&request); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid request body",
 		})
 	}
 
-	customer, err := a.customerService.UpdateCustomer(c.Context(), customerID, &request)
+	customer, err := a.paymentService.UpdateCustomer(c.Context(), customerID, &request)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": err.Error(),
@@ -204,7 +219,7 @@ func (a *App) deleteCustomer(c *fiber.Ctx) error {
 		})
 	}
 
-	err := a.customerService.DeleteCustomer(c.Context(), customerID)
+	err := a.paymentService.DeleteCustomer(c.Context(), customerID)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": err.Error(),
@@ -223,7 +238,7 @@ func (a *App) addPaymentMethod(c *fiber.Ctx) error {
 		})
 	}
 
-	var request stripe.PaymentMethodRequest
+	var request services.PaymentMethodRequest
 	if err := c.BodyParser(&request); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid request body",
@@ -233,7 +248,7 @@ func (a *App) addPaymentMethod(c *fiber.Ctx) error {
 	// Set the customer ID from the URL parameter
 	request.Customer = customerID
 
-	paymentMethod, err := a.customerService.AddPaymentMethod(c.Context(), &request)
+	paymentMethod, err := a.paymentService.AddPaymentMethod(c.Context(), &request)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": err.Error(),
@@ -252,7 +267,7 @@ func (a *App) listPaymentMethods(c *fiber.Ctx) error {
 		})
 	}
 
-	paymentMethods, err := a.customerService.ListPaymentMethods(c.Context(), customerID, 0)
+	paymentMethods, err := a.paymentService.ListPaymentMethods(c.Context(), customerID, 0)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": err.Error(),
@@ -271,7 +286,7 @@ func (a *App) getPaymentMethod(c *fiber.Ctx) error {
 		})
 	}
 
-	paymentMethod, err := a.customerService.GetPaymentMethod(c.Context(), paymentMethodID)
+	paymentMethod, err := a.paymentService.GetPaymentMethod(c.Context(), paymentMethodID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": err.Error(),
@@ -290,7 +305,7 @@ func (a *App) detachPaymentMethod(c *fiber.Ctx) error {
 		})
 	}
 
-	err := a.customerService.DetachPaymentMethod(c.Context(), paymentMethodID)
+	err := a.paymentService.DetachPaymentMethod(c.Context(), paymentMethodID)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": err.Error(),
@@ -302,14 +317,14 @@ func (a *App) detachPaymentMethod(c *fiber.Ctx) error {
 
 // createCharge handles charge creation
 func (a *App) createCharge(c *fiber.Ctx) error {
-	var request stripe.ChargeRequest
+	var request services.ChargeRequest
 	if err := c.BodyParser(&request); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid request body",
 		})
 	}
 
-	charge, err := a.chargeService.CreateCharge(c.Context(), &request)
+	charge, err := a.paymentService.CreateCharge(c.Context(), &request)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": err.Error(),
@@ -328,7 +343,7 @@ func (a *App) getCharge(c *fiber.Ctx) error {
 		})
 	}
 
-	charge, err := a.chargeService.GetCharge(c.Context(), chargeID)
+	charge, err := a.paymentService.GetCharge(c.Context(), chargeID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": err.Error(),
@@ -342,7 +357,7 @@ func (a *App) getCharge(c *fiber.Ctx) error {
 func (a *App) listCharges(c *fiber.Ctx) error {
 	customerID := c.Query("customer_id")
 
-	charges, err := a.chargeService.ListCharges(c.Context(), customerID, 0)
+	charges, err := a.paymentService.ListCharges(c.Context(), customerID, 0)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": err.Error(),
@@ -354,14 +369,14 @@ func (a *App) listCharges(c *fiber.Ctx) error {
 
 // createRefund handles refund creation
 func (a *App) createRefund(c *fiber.Ctx) error {
-	var request stripe.RefundRequest
+	var request services.RefundRequest
 	if err := c.BodyParser(&request); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid request body",
 		})
 	}
 
-	refund, err := a.refundService.CreateRefund(c.Context(), &request)
+	refund, err := a.paymentService.CreateRefund(c.Context(), &request)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": err.Error(),
@@ -380,7 +395,7 @@ func (a *App) getRefund(c *fiber.Ctx) error {
 		})
 	}
 
-	refund, err := a.refundService.GetRefund(c.Context(), refundID)
+	refund, err := a.paymentService.GetRefund(c.Context(), refundID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": err.Error(),
@@ -399,7 +414,7 @@ func (a *App) listRefunds(c *fiber.Ctx) error {
 		})
 	}
 
-	refunds, err := a.refundService.ListRefunds(c.Context(), chargeID, 100)
+	refunds, err := a.paymentService.ListRefunds(c.Context(), chargeID, 100)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": err.Error(),
@@ -411,14 +426,14 @@ func (a *App) listRefunds(c *fiber.Ctx) error {
 
 // createDispute handles dispute creation
 func (a *App) createDispute(c *fiber.Ctx) error {
-	var request stripe.DisputeRequest
+	var request services.DisputeRequest
 	if err := c.BodyParser(&request); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid request body",
 		})
 	}
 
-	dispute, err := a.disputeService.CreateDispute(c.Context(), &request)
+	dispute, err := a.paymentService.CreateDispute(c.Context(), &request)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": err.Error(),
@@ -437,7 +452,7 @@ func (a *App) getDispute(c *fiber.Ctx) error {
 		})
 	}
 
-	dispute, err := a.disputeService.GetDispute(c.Context(), disputeID)
+	dispute, err := a.paymentService.GetDispute(c.Context(), disputeID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": err.Error(),
@@ -456,7 +471,7 @@ func (a *App) listDisputes(c *fiber.Ctx) error {
 		})
 	}
 
-	disputes, err := a.disputeService.ListDisputes(c.Context(), chargeID, 100)
+	disputes, err := a.paymentService.ListDisputes(c.Context(), chargeID, 100)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": err.Error(),
@@ -490,7 +505,7 @@ func (a *App) updateDisputeStatus(c *fiber.Ctx) error {
 		})
 	}
 
-	dispute, err := a.disputeService.UpdateDisputeStatus(c.Context(), disputeID, request.Status)
+	dispute, err := a.paymentService.UpdateDisputeStatus(c.Context(), disputeID, request.Status)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": err.Error(),
@@ -595,7 +610,10 @@ func main() {
 	}
 
 	// Create and run the application
-	app := NewApp()
+	app, err := NewApp()
+	if err != nil {
+		log.Fatalf("Failed to create application: %v", err)
+	}
 
 	log.Printf("Starting Payments API server on port %s", port)
 	if err := app.Run(port); err != nil {

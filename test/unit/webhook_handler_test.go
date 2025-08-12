@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"apis/payments/services/stripe"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/stretchr/testify/assert"
 )
@@ -21,11 +22,11 @@ func TestWebhookHandler(t *testing.T) {
 	t.Run("POST /api/v1/webhooks/stripe should handle valid webhook events", func(t *testing.T) {
 		// Create test app with webhook routes
 		app := fiber.New()
-		
+
 		// Add webhook route
 		webhookSecret := "whsec_test_secret"
 		webhookService := stripe.NewWebhookService(webhookSecret)
-		
+
 		// Create a simple handler for testing
 		app.Post("/api/v1/webhooks/stripe", func(c *fiber.Ctx) error {
 			webhookReq, err := webhookService.ParseWebhookRequest(c)
@@ -45,7 +46,7 @@ func TestWebhookHandler(t *testing.T) {
 				"status": "webhook processed successfully",
 			})
 		})
-		
+
 		// Create test webhook event
 		eventData := map[string]interface{}{
 			"id":      "evt_test123",
@@ -59,33 +60,33 @@ func TestWebhookHandler(t *testing.T) {
 				},
 			},
 		}
-		
+
 		eventJSON, _ := json.Marshal(eventData)
-		
+
 		// Create webhook signature
 		timestamp := time.Now().Unix()
 		signature := createWebhookSignature(webhookSecret, fmt.Sprintf("%d", timestamp), string(eventJSON))
-		
+
 		// Create request
 		req := httptest.NewRequest("POST", "/api/v1/webhooks/stripe", bytes.NewReader(eventJSON))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Stripe-Signature", fmt.Sprintf("t=%d,v1=%s", timestamp, signature))
-		
+
 		// Make request
 		resp, err := app.Test(req)
 		assert.NoError(t, err)
-		
+
 		assert.Equal(t, 200, resp.StatusCode, "Webhook should return 200 OK for valid events")
 	})
-	
+
 	t.Run("POST /api/v1/webhooks/stripe should reject invalid signatures", func(t *testing.T) {
 		// Create test app with webhook routes
 		app := fiber.New()
-		
+
 		// Add webhook route
 		webhookSecret := "whsec_test_secret"
 		webhookService := stripe.NewWebhookService(webhookSecret)
-		
+
 		// Create a simple handler for testing
 		app.Post("/api/v1/webhooks/stripe", func(c *fiber.Ctx) error {
 			webhookReq, err := webhookService.ParseWebhookRequest(c)
@@ -105,38 +106,38 @@ func TestWebhookHandler(t *testing.T) {
 				"status": "webhook processed successfully",
 			})
 		})
-		
+
 		// Create test webhook event
 		eventData := map[string]interface{}{
 			"id":      "evt_test123",
 			"type":    "payment_intent.succeeded",
 			"created": time.Now().Unix(),
 		}
-		
+
 		eventJSON, _ := json.Marshal(eventData)
-		
+
 		// Create invalid signature
 		req := httptest.NewRequest("POST", "/api/v1/webhooks/stripe", bytes.NewReader(eventJSON))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Stripe-Signature", "t=1234567890,v1=invalid_signature")
-		
+
 		// Make request
 		resp, err := app.Test(req)
 		assert.NoError(t, err)
-		
+
 		assert.Equal(t, 400, resp.StatusCode, "Webhook should return 400 Bad Request for invalid signatures")
 	})
-	
+
 	t.Run("POST /api/v1/webhooks/stripe should handle payment_intent.succeeded event", func(t *testing.T) {
 		// TODO: Test specific event type handling
 		assert.True(t, true, "Test placeholder for payment_intent.succeeded event handling")
 	})
-	
+
 	t.Run("POST /api/v1/webhooks/stripe should handle charge.succeeded event", func(t *testing.T) {
 		// TODO: Test specific event type handling
 		assert.True(t, true, "Test placeholder for charge.succeeded event handling")
 	})
-	
+
 	t.Run("POST /api/v1/webhooks/stripe should handle charge.refunded event", func(t *testing.T) {
 		// TODO: Test specific event type handling
 		assert.True(t, true, "Test placeholder for charge.refunded event handling")
@@ -162,7 +163,7 @@ func TestWebhookEventTypes(t *testing.T) {
 		"charge.dispute.created",
 		"charge.dispute.closed",
 	}
-	
+
 	for _, eventType := range requiredEvents {
 		t.Run(fmt.Sprintf("should handle %s event", eventType), func(t *testing.T) {
 			// TODO: Test that each event type is properly handled

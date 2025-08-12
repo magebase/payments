@@ -21,9 +21,9 @@ import (
 
 // WebhookService handles Stripe webhook events
 type WebhookService struct {
-	validator    *validator.Validate
+	validator     *validator.Validate
 	webhookSecret string
-	tracer       trace.Tracer
+	tracer        trace.Tracer
 }
 
 // NewWebhookService creates a new webhook service
