@@ -18,6 +18,8 @@ type PaymentGateway interface {
 	RefundGateway
 	// Dispute operations
 	DisputeGateway
+	// Subscription operations
+	SubscriptionGateway
 	// Provider information
 	GetProviderName() string
 	GetCapabilities() GatewayCapabilities
@@ -188,4 +190,101 @@ type Dispute struct {
 	Created    int64             `json:"created"`
 	Updated    int64             `json:"updated"`
 	ProviderID string            `json:"provider_id"` // Original provider ID
+}
+
+// Subscription plan types
+type SubscriptionPlanRequest struct {
+	Name           string            `json:"name" validate:"required,min=1"`
+	Description    string            `json:"description,omitempty"`
+	Amount         int64             `json:"amount" validate:"required,min=1"`
+	Currency       string            `json:"currency" validate:"required,len=3"`
+	Interval       string            `json:"interval" validate:"required,oneof=day week month year"`
+	IntervalCount  int               `json:"interval_count" validate:"required,min=1"`
+	TrialPeriodDays *int             `json:"trial_period_days,omitempty"`
+	Metadata       map[string]string `json:"metadata,omitempty"`
+}
+
+type SubscriptionPlan struct {
+	ID             string            `json:"id"`
+	Name           string            `json:"name"`
+	Description    string            `json:"description,omitempty"`
+	Amount         int64             `json:"amount"`
+	Currency       string            `json:"currency"`
+	Interval       string            `json:"interval"`
+	IntervalCount  int               `json:"interval_count"`
+	TrialPeriodDays *int             `json:"trial_period_days,omitempty"`
+	Metadata       map[string]string `json:"metadata,omitempty"`
+	Created        int64             `json:"created"`
+	Updated        int64             `json:"updated"`
+	ProviderID     string            `json:"provider_id"` // Original provider ID
+}
+
+type SubscriptionPlanUpdateRequest struct {
+	Name           *string            `json:"name,omitempty"`
+	Description    *string            `json:"description,omitempty"`
+	Amount         *int64             `json:"amount,omitempty"`
+	TrialPeriodDays *int              `json:"trial_period_days,omitempty"`
+	Metadata       map[string]string  `json:"metadata,omitempty"`
+}
+
+type SubscriptionPlanListParams struct {
+	Limit  int    `json:"limit,omitempty"`
+	Offset int    `json:"offset,omitempty"`
+	Active *bool  `json:"active,omitempty"`
+}
+
+// Subscription types
+type SubscriptionRequest struct {
+	CustomerID     string            `json:"customer_id" validate:"required"`
+	PlanID         string            `json:"plan_id" validate:"required"`
+	PaymentMethod  string            `json:"payment_method,omitempty"`
+	TrialEnd       *int64            `json:"trial_end,omitempty"`
+	Metadata       map[string]string `json:"metadata,omitempty"`
+}
+
+type Subscription struct {
+	ID             string            `json:"id"`
+	CustomerID     string            `json:"customer_id"`
+	PlanID         string            `json:"plan_id"`
+	Status         string            `json:"status"`
+	CurrentPeriodStart int64         `json:"current_period_start"`
+	CurrentPeriodEnd   int64         `json:"current_period_end"`
+	TrialStart     *int64            `json:"trial_start,omitempty"`
+	TrialEnd       *int64            `json:"trial_end,omitempty"`
+	CanceledAt     *int64            `json:"canceled_at,omitempty"`
+	EndedAt        *int64            `json:"ended_at,omitempty"`
+	Metadata       map[string]string `json:"metadata,omitempty"`
+	Created        int64             `json:"created"`
+	Updated        int64             `json:"updated"`
+	ProviderID     string            `json:"provider_id"` // Original provider ID
+}
+
+type SubscriptionUpdateRequest struct {
+	PlanID         *string            `json:"plan_id,omitempty"`
+	PaymentMethod  *string            `json:"payment_method,omitempty"`
+	TrialEnd       *int64             `json:"trial_end,omitempty"`
+	Metadata       map[string]string  `json:"metadata,omitempty"`
+}
+
+type SubscriptionListParams struct {
+	CustomerID string `json:"customer_id,omitempty"`
+	Status     string `json:"status,omitempty"`
+	Limit      int    `json:"limit,omitempty"`
+	Offset     int    `json:"offset,omitempty"`
+}
+
+// Extend PaymentGateway interface to include subscription methods
+type SubscriptionGateway interface {
+	CreateSubscriptionPlan(ctx context.Context, req *SubscriptionPlanRequest) (*SubscriptionPlan, error)
+	GetSubscriptionPlan(ctx context.Context, planID string) (*SubscriptionPlan, error)
+	ListSubscriptionPlans(ctx context.Context, params *SubscriptionPlanListParams) ([]*SubscriptionPlan, error)
+	UpdateSubscriptionPlan(ctx context.Context, planID string, req *SubscriptionPlanUpdateRequest) (*SubscriptionPlan, error)
+	DeleteSubscriptionPlan(ctx context.Context, planID string) error
+	
+	CreateSubscription(ctx context.Context, req *SubscriptionRequest) (*Subscription, error)
+	GetSubscription(ctx context.Context, subscriptionID string) (*Subscription, error)
+	ListSubscriptions(ctx context.Context, params *SubscriptionListParams) ([]*Subscription, error)
+	UpdateSubscription(ctx context.Context, subscriptionID string, req *SubscriptionUpdateRequest) (*Subscription, error)
+	CancelSubscription(ctx context.Context, subscriptionID string) (*Subscription, error)
+	ReactivateSubscription(ctx context.Context, subscriptionID string) (*Subscription, error)
 }

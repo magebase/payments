@@ -209,6 +209,52 @@ func (s *PaymentService) UpdateDisputeStatus(ctx context.Context, disputeID stri
 	return s.gateway.UpdateDisputeStatus(ctx, disputeID, status)
 }
 
+// Subscription plan methods
+func (s *PaymentService) CreateSubscriptionPlan(ctx context.Context, req *SubscriptionPlanRequest) (*SubscriptionPlan, error) {
+	return s.gateway.CreateSubscriptionPlan(ctx, req)
+}
+
+func (s *PaymentService) GetSubscriptionPlan(ctx context.Context, planID string) (*SubscriptionPlan, error) {
+	return s.gateway.GetSubscriptionPlan(ctx, planID)
+}
+
+func (s *PaymentService) ListSubscriptionPlans(ctx context.Context, params *SubscriptionPlanListParams) ([]*SubscriptionPlan, error) {
+	return s.gateway.ListSubscriptionPlans(ctx, params)
+}
+
+func (s *PaymentService) UpdateSubscriptionPlan(ctx context.Context, planID string, req *SubscriptionPlanUpdateRequest) (*SubscriptionPlan, error) {
+	return s.gateway.UpdateSubscriptionPlan(ctx, planID, req)
+}
+
+func (s *PaymentService) DeleteSubscriptionPlan(ctx context.Context, planID string) error {
+	return s.gateway.DeleteSubscriptionPlan(ctx, planID)
+}
+
+// Subscription methods
+func (s *PaymentService) CreateSubscription(ctx context.Context, req *SubscriptionRequest) (*Subscription, error) {
+	return s.gateway.CreateSubscription(ctx, req)
+}
+
+func (s *PaymentService) GetSubscription(ctx context.Context, subscriptionID string) (*Subscription, error) {
+	return s.gateway.GetSubscription(ctx, subscriptionID)
+}
+
+func (s *PaymentService) ListSubscriptions(ctx context.Context, params *SubscriptionListParams) ([]*Subscription, error) {
+	return s.gateway.ListSubscriptions(ctx, params)
+}
+
+func (s *PaymentService) UpdateSubscription(ctx context.Context, subscriptionID string, req *SubscriptionUpdateRequest) (*Subscription, error) {
+	return s.gateway.UpdateSubscription(ctx, subscriptionID, req)
+}
+
+func (s *PaymentService) CancelSubscription(ctx context.Context, subscriptionID string) (*Subscription, error) {
+	return s.gateway.CancelSubscription(ctx, subscriptionID)
+}
+
+func (s *PaymentService) ReactivateSubscription(ctx context.Context, subscriptionID string) (*Subscription, error) {
+	return s.gateway.ReactivateSubscription(ctx, subscriptionID)
+}
+
 // Feature detection and capability checking
 func (s *PaymentService) SupportsSubscriptions() bool {
 	return s.gateway.GetCapabilities().SupportsSubscriptions

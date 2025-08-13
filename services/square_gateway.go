@@ -309,18 +309,51 @@ func (g *SquareGateway) ListDisputes(ctx context.Context, chargeID string, limit
 
 // UpdateDisputeStatus updates a dispute status
 func (g *SquareGateway) UpdateDisputeStatus(ctx context.Context, disputeID string, status string) (*Dispute, error) {
-	ctx, span := g.tracer.Start(ctx, "SquareGateway.UpdateDisputeStatus")
-	defer span.End()
+	return nil, fmt.Errorf("dispute status updates not implemented yet for Square")
+}
 
-	if disputeID == "" {
-		return nil, fmt.Errorf("dispute ID is required")
-	}
+// Subscription plan operations - placeholder implementations
+func (g *SquareGateway) CreateSubscriptionPlan(ctx context.Context, req *SubscriptionPlanRequest) (*SubscriptionPlan, error) {
+	return nil, fmt.Errorf("subscription plans not implemented yet for Square")
+}
 
-	if status == "" {
-		return nil, fmt.Errorf("status is required")
-	}
+func (g *SquareGateway) GetSubscriptionPlan(ctx context.Context, planID string) (*SubscriptionPlan, error) {
+	return nil, fmt.Errorf("subscription plans not implemented yet for Square")
+}
 
-	// Note: This is a placeholder implementation
-	// In a real implementation, you would call Square's API
-	return nil, fmt.Errorf("Square dispute status update not implemented yet")
+func (g *SquareGateway) ListSubscriptionPlans(ctx context.Context, params *SubscriptionPlanListParams) ([]*SubscriptionPlan, error) {
+	return nil, fmt.Errorf("subscription plans not implemented yet for Square")
+}
+
+func (g *SquareGateway) UpdateSubscriptionPlan(ctx context.Context, planID string, req *SubscriptionPlanUpdateRequest) (*SubscriptionPlan, error) {
+	return nil, fmt.Errorf("subscription plans not implemented yet for Square")
+}
+
+func (g *SquareGateway) DeleteSubscriptionPlan(ctx context.Context, planID string) error {
+	return fmt.Errorf("subscription plans not implemented yet for Square")
+}
+
+// Subscription operations - placeholder implementations
+func (g *SquareGateway) CreateSubscription(ctx context.Context, req *SubscriptionRequest) (*Subscription, error) {
+	return nil, fmt.Errorf("subscriptions not implemented yet for Square")
+}
+
+func (g *SquareGateway) GetSubscription(ctx context.Context, subscriptionID string) (*Subscription, error) {
+	return nil, fmt.Errorf("subscriptions not implemented yet for Square")
+}
+
+func (g *SquareGateway) ListSubscriptions(ctx context.Context, params *SubscriptionListParams) ([]*Subscription, error) {
+	return nil, fmt.Errorf("subscriptions not implemented yet for Square")
+}
+
+func (g *SquareGateway) UpdateSubscription(ctx context.Context, subscriptionID string, req *SubscriptionUpdateRequest) (*Subscription, error) {
+	return nil, fmt.Errorf("subscriptions not implemented yet for Square")
+}
+
+func (g *SquareGateway) CancelSubscription(ctx context.Context, subscriptionID string) (*Subscription, error) {
+	return nil, fmt.Errorf("subscriptions not implemented yet for Square")
+}
+
+func (g *SquareGateway) ReactivateSubscription(ctx context.Context, subscriptionID string) (*Subscription, error) {
+	return nil, fmt.Errorf("subscriptions not implemented yet for Square")
 }

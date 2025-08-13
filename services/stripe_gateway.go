@@ -11,6 +11,9 @@ import (
 	"github.com/stripe/stripe-go/v76/dispute"
 	"github.com/stripe/stripe-go/v76/paymentmethod"
 	"github.com/stripe/stripe-go/v76/refund"
+	"github.com/stripe/stripe-go/v76/product"
+	"github.com/stripe/stripe-go/v76/price"
+	"github.com/stripe/stripe-go/v76/subscription"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -711,4 +714,421 @@ func (g *StripeGateway) UpdateDisputeStatus(ctx context.Context, disputeID strin
 	// Note: Stripe has limited dispute status update capabilities
 	// This method would typically be used for internal dispute tracking
 	return nil, fmt.Errorf("Stripe has limited dispute status update capabilities")
+}
+
+// Subscription plan operations
+func (g *StripeGateway) CreateSubscriptionPlan(ctx context.Context, req *SubscriptionPlanRequest) (*SubscriptionPlan, error) {
+	ctx, span := g.tracer.Start(ctx, "StripeGateway.CreateSubscriptionPlan")
+	defer span.End()
+
+	if req == nil {
+		return nil, fmt.Errorf("subscription plan request is required")
+	}
+
+	// Convert to Stripe product params
+	productParams := &stripe.ProductParams{
+		Name:        stripe.String(req.Name),
+		Description: stripe.String(req.Description),
+		Metadata:    req.Metadata,
+	}
+
+	// Create product in Stripe
+	stripeProduct, err := product.New(productParams)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Stripe product: %w", err)
+	}
+
+	// Convert to Stripe price params
+	priceParams := &stripe.PriceParams{
+		Product:    stripe.String(stripeProduct.ID),
+		UnitAmount: stripe.Int64(req.Amount),
+		Currency:   stripe.String(req.Currency),
+		Recurring: &stripe.PriceRecurringParams{
+			Interval:      stripe.String(req.Interval),
+			IntervalCount: stripe.Int64(int64(req.IntervalCount)),
+		},
+		Metadata: req.Metadata,
+	}
+
+	// Create price in Stripe
+	stripePrice, err := price.New(priceParams)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Stripe price: %w", err)
+	}
+
+	// Convert to common SubscriptionPlan type
+	return &SubscriptionPlan{
+		ID:             stripePrice.ID,
+		Name:           req.Name,
+		Description:    req.Description,
+		Amount:         req.Amount,
+		Currency:       req.Currency,
+		Interval:       req.Interval,
+		IntervalCount:  req.IntervalCount,
+		TrialPeriodDays: req.TrialPeriodDays,
+		Metadata:       req.Metadata,
+		Created:        stripePrice.Created,
+		Updated:        stripePrice.Created,
+		ProviderID:     stripePrice.ID,
+	}, nil
+}
+
+func (g *StripeGateway) GetSubscriptionPlan(ctx context.Context, planID string) (*SubscriptionPlan, error) {
+	ctx, span := g.tracer.Start(ctx, "StripeGateway.GetSubscriptionPlan")
+	defer span.End()
+
+	if planID == "" {
+		return nil, fmt.Errorf("plan ID is required")
+	}
+
+	// Get price from Stripe
+	stripePrice, err := price.Get(planID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Stripe price: %w", err)
+	}
+
+	// Get product from Stripe
+	stripeProduct, err := product.Get(stripePrice.Product.ID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Stripe product: %w", err)
+	}
+
+	// Convert to common SubscriptionPlan type
+	return &SubscriptionPlan{
+		ID:             stripePrice.ID,
+		Name:           stripeProduct.Name,
+		Description:    stripeProduct.Description,
+		Amount:         stripePrice.UnitAmount,
+		Currency:       string(stripePrice.Currency),
+		Interval:       string(stripePrice.Recurring.Interval),
+		IntervalCount:  int(stripePrice.Recurring.IntervalCount),
+		Metadata:       stripePrice.Metadata,
+		Created:        stripePrice.Created,
+		Updated:        stripePrice.Created,
+		ProviderID:     stripePrice.ID,
+	}, nil
+}
+
+func (g *StripeGateway) ListSubscriptionPlans(ctx context.Context, params *SubscriptionPlanListParams) ([]*SubscriptionPlan, error) {
+	ctx, span := g.tracer.Start(ctx, "StripeGateway.ListSubscriptionPlans")
+	defer span.End()
+
+	// List prices from Stripe
+	priceParams := &stripe.PriceListParams{
+		Active: stripe.Bool(true),
+	}
+	if params.Limit > 0 {
+		priceParams.Limit = stripe.Int64(int64(params.Limit))
+	}
+
+	iter := price.List(priceParams)
+	var plans []*SubscriptionPlan
+
+	for iter.Next() {
+		stripePrice := iter.Price()
+		if stripePrice.Recurring == nil {
+			continue // Skip non-recurring prices
+		}
+
+		// Get product for this price
+		stripeProduct, err := product.Get(stripePrice.Product.ID, nil)
+		if err != nil {
+			continue // Skip if product not found
+		}
+
+		plan := &SubscriptionPlan{
+			ID:             stripePrice.ID,
+			Name:           stripeProduct.Name,
+			Description:    stripeProduct.Description,
+			Amount:         stripePrice.UnitAmount,
+			Currency:       string(stripePrice.Currency),
+			Interval:       string(stripePrice.Recurring.Interval),
+			IntervalCount:  int(stripePrice.Recurring.IntervalCount),
+			Metadata:       stripePrice.Metadata,
+			Created:        stripePrice.Created,
+			Updated:        stripePrice.Created,
+			ProviderID:     stripePrice.ID,
+		}
+		plans = append(plans, plan)
+	}
+
+	if err := iter.Err(); err != nil {
+		return nil, fmt.Errorf("failed to list Stripe prices: %w", err)
+	}
+
+	return plans, nil
+}
+
+func (g *StripeGateway) UpdateSubscriptionPlan(ctx context.Context, planID string, req *SubscriptionPlanUpdateRequest) (*SubscriptionPlan, error) {
+	ctx, span := g.tracer.Start(ctx, "StripeGateway.UpdateSubscriptionPlan")
+	defer span.End()
+
+	if planID == "" {
+		return nil, fmt.Errorf("plan ID is required")
+	}
+
+	// Get current price
+	stripePrice, err := price.Get(planID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Stripe price: %w", err)
+	}
+
+	// Update product if name/description changed
+	if req.Name != nil || req.Description != nil {
+		productParams := &stripe.ProductParams{}
+		if req.Name != nil {
+			productParams.Name = stripe.String(*req.Name)
+		}
+		if req.Description != nil {
+			productParams.Description = stripe.String(*req.Description)
+		}
+
+		_, err = product.Update(stripePrice.Product.ID, productParams)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update Stripe product: %w", err)
+		}
+	}
+
+	// Update metadata if provided
+	if req.Metadata != nil {
+		priceParams := &stripe.PriceParams{
+			Metadata: req.Metadata,
+		}
+		_, err = price.Update(planID, priceParams)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update Stripe price: %w", err)
+		}
+	}
+
+	// Return updated plan
+	return g.GetSubscriptionPlan(ctx, planID)
+}
+
+func (g *StripeGateway) DeleteSubscriptionPlan(ctx context.Context, planID string) error {
+	ctx, span := g.tracer.Start(ctx, "StripeGateway.DeleteSubscriptionPlan")
+	defer span.End()
+
+	if planID == "" {
+		return fmt.Errorf("plan ID is required")
+	}
+
+	// Archive the price in Stripe (soft delete)
+	priceParams := &stripe.PriceParams{
+		Active: stripe.Bool(false),
+	}
+	_, err := price.Update(planID, priceParams)
+	if err != nil {
+		return fmt.Errorf("failed to archive Stripe price: %w", err)
+	}
+
+	return nil
+}
+
+// Subscription operations
+func (g *StripeGateway) CreateSubscription(ctx context.Context, req *SubscriptionRequest) (*Subscription, error) {
+	ctx, span := g.tracer.Start(ctx, "StripeGateway.CreateSubscription")
+	defer span.End()
+
+	if req == nil {
+		return nil, fmt.Errorf("subscription request is required")
+	}
+
+	// Convert to Stripe subscription params
+	subscriptionParams := &stripe.SubscriptionParams{
+		Customer: stripe.String(req.CustomerID),
+		Items: []*stripe.SubscriptionItemsParams{
+			{
+				Price: stripe.String(req.PlanID),
+			},
+		},
+		Metadata: req.Metadata,
+	}
+
+	if req.TrialEnd != nil {
+		subscriptionParams.TrialEnd = stripe.Int64(*req.TrialEnd)
+	}
+
+	// Create subscription in Stripe
+	stripeSubscription, err := subscription.New(subscriptionParams)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Stripe subscription: %w", err)
+	}
+
+	// Convert to common Subscription type
+	return &Subscription{
+		ID:                 stripeSubscription.ID,
+		CustomerID:         req.CustomerID,
+		PlanID:             req.PlanID,
+		Status:             string(stripeSubscription.Status),
+		CurrentPeriodStart: stripeSubscription.CurrentPeriodStart,
+		CurrentPeriodEnd:   stripeSubscription.CurrentPeriodEnd,
+		TrialStart:         &stripeSubscription.TrialStart,
+		TrialEnd:           &stripeSubscription.TrialEnd,
+		CanceledAt:         &stripeSubscription.CanceledAt,
+		EndedAt:            &stripeSubscription.EndedAt,
+		Metadata:           req.Metadata,
+		Created:            stripeSubscription.Created,
+		Updated:            stripeSubscription.Created,
+		ProviderID:         stripeSubscription.ID,
+	}, nil
+}
+
+func (g *StripeGateway) GetSubscription(ctx context.Context, subscriptionID string) (*Subscription, error) {
+	ctx, span := g.tracer.Start(ctx, "StripeGateway.GetSubscription")
+	defer span.End()
+
+	if subscriptionID == "" {
+		return nil, fmt.Errorf("subscription ID is required")
+	}
+
+	// Get subscription from Stripe
+	stripeSubscription, err := subscription.Get(subscriptionID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Stripe subscription: %w", err)
+	}
+
+	// Convert to common Subscription type
+	return &Subscription{
+		ID:                 stripeSubscription.ID,
+		CustomerID:         stripeSubscription.Customer.ID,
+		PlanID:             stripeSubscription.Items.Data[0].Price.ID,
+		Status:             string(stripeSubscription.Status),
+		CurrentPeriodStart: stripeSubscription.CurrentPeriodStart,
+		CurrentPeriodEnd:   stripeSubscription.CurrentPeriodEnd,
+		TrialStart:         &stripeSubscription.TrialStart,
+		TrialEnd:           &stripeSubscription.TrialEnd,
+		CanceledAt:         &stripeSubscription.CanceledAt,
+		EndedAt:            &stripeSubscription.EndedAt,
+		Metadata:           stripeSubscription.Metadata,
+		Created:            stripeSubscription.Created,
+		Updated:            stripeSubscription.Created,
+		ProviderID:         stripeSubscription.ID,
+	}, nil
+}
+
+func (g *StripeGateway) ListSubscriptions(ctx context.Context, params *SubscriptionListParams) ([]*Subscription, error) {
+	ctx, span := g.tracer.Start(ctx, "StripeGateway.ListSubscriptions")
+	defer span.End()
+
+	// List subscriptions from Stripe
+	subscriptionParams := &stripe.SubscriptionListParams{}
+	if params.CustomerID != "" {
+		subscriptionParams.Customer = stripe.String(params.CustomerID)
+	}
+	if params.Status != "" {
+		subscriptionParams.Status = stripe.String(params.Status)
+	}
+	if params.Limit > 0 {
+		subscriptionParams.Limit = stripe.Int64(int64(params.Limit))
+	}
+
+	iter := subscription.List(subscriptionParams)
+	var subscriptions []*Subscription
+
+	for iter.Next() {
+		stripeSubscription := iter.Subscription()
+		if len(stripeSubscription.Items.Data) == 0 {
+			continue
+		}
+
+		subscription := &Subscription{
+			ID:                 stripeSubscription.ID,
+			CustomerID:         stripeSubscription.Customer.ID,
+			PlanID:             stripeSubscription.Items.Data[0].Price.ID,
+			Status:             string(stripeSubscription.Status),
+			CurrentPeriodStart: stripeSubscription.CurrentPeriodStart,
+			CurrentPeriodEnd:   stripeSubscription.CurrentPeriodEnd,
+			TrialStart:         &stripeSubscription.TrialStart,
+			TrialEnd:           &stripeSubscription.TrialEnd,
+			CanceledAt:         &stripeSubscription.CanceledAt,
+			EndedAt:            &stripeSubscription.EndedAt,
+			Metadata:           stripeSubscription.Metadata,
+			Created:            stripeSubscription.Created,
+			Updated:            stripeSubscription.Created,
+			ProviderID:         stripeSubscription.ID,
+		}
+		subscriptions = append(subscriptions, subscription)
+	}
+
+	if err := iter.Err(); err != nil {
+		return nil, fmt.Errorf("failed to list Stripe subscriptions: %w", err)
+	}
+
+	return subscriptions, nil
+}
+
+func (g *StripeGateway) UpdateSubscription(ctx context.Context, subscriptionID string, req *SubscriptionUpdateRequest) (*Subscription, error) {
+	ctx, span := g.tracer.Start(ctx, "StripeGateway.UpdateSubscription")
+	defer span.End()
+
+	if subscriptionID == "" {
+		return nil, fmt.Errorf("subscription ID is required")
+	}
+
+	// Convert to Stripe subscription update params
+	subscriptionParams := &stripe.SubscriptionParams{}
+	if req.PlanID != nil {
+		subscriptionParams.Items = []*stripe.SubscriptionItemsParams{
+			{
+				Price: stripe.String(*req.PlanID),
+			},
+		}
+	}
+	if req.TrialEnd != nil {
+		subscriptionParams.TrialEnd = stripe.Int64(*req.TrialEnd)
+	}
+	if req.Metadata != nil {
+		subscriptionParams.Metadata = req.Metadata
+	}
+
+	// Update subscription in Stripe
+	_, err := subscription.Update(subscriptionID, subscriptionParams)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update Stripe subscription: %w", err)
+	}
+
+	// Return updated subscription
+	return g.GetSubscription(ctx, subscriptionID)
+}
+
+func (g *StripeGateway) CancelSubscription(ctx context.Context, subscriptionID string) (*Subscription, error) {
+	ctx, span := g.tracer.Start(ctx, "StripeGateway.CancelSubscription")
+	defer span.End()
+
+	if subscriptionID == "" {
+		return nil, fmt.Errorf("subscription ID is required")
+	}
+
+	// Cancel subscription in Stripe
+	subscriptionParams := &stripe.SubscriptionParams{
+		CancelAtPeriodEnd: stripe.Bool(true),
+	}
+	_, err := subscription.Update(subscriptionID, subscriptionParams)
+	if err != nil {
+		return nil, fmt.Errorf("failed to cancel Stripe subscription: %w", err)
+	}
+
+	// Return canceled subscription
+	return g.GetSubscription(ctx, subscriptionID)
+}
+
+func (g *StripeGateway) ReactivateSubscription(ctx context.Context, subscriptionID string) (*Subscription, error) {
+	ctx, span := g.tracer.Start(ctx, "StripeGateway.ReactivateSubscription")
+	defer span.End()
+
+	if subscriptionID == "" {
+		return nil, fmt.Errorf("subscription ID is required")
+	}
+
+	// Reactivate subscription in Stripe
+	subscriptionParams := &stripe.SubscriptionParams{
+		CancelAtPeriodEnd: stripe.Bool(false),
+	}
+	_, err := subscription.Update(subscriptionID, subscriptionParams)
+	if err != nil {
+		return nil, fmt.Errorf("failed to reactivate Stripe subscription: %w", err)
+	}
+
+	// Return reactivated subscription
+	return g.GetSubscription(ctx, subscriptionID)
 }

@@ -13,6 +13,9 @@ type MockGateway struct {
 	charges        map[string]*Charge
 	refunds        map[string]*Refund
 	disputes       map[string]*Dispute
+	subscriptionPlans map[string]*SubscriptionPlan
+	subscriptions map[string]*Subscription
+	counter       int64 // Add counter for unique IDs
 }
 
 // NewMockGateway creates a new mock gateway for testing
@@ -23,13 +26,17 @@ func NewMockGateway() *MockGateway {
 		charges:        make(map[string]*Charge),
 		refunds:        make(map[string]*Refund),
 		disputes:       make(map[string]*Dispute),
+		subscriptionPlans: make(map[string]*SubscriptionPlan),
+		subscriptions: make(map[string]*Subscription),
+		counter:       0, // Initialize counter
 	}
 }
 
 // Customer operations
 func (m *MockGateway) CreateCustomer(ctx context.Context, req *CustomerRequest) (*Customer, error) {
+	m.counter++
 	customer := &Customer{
-		ID:          "cus_mock_" + time.Now().Format("20060102150405"),
+		ID:          "cus_mock_" + time.Now().Format("20060102150405") + fmt.Sprintf("%d", m.counter),
 		Email:       req.Email,
 		Name:        req.Name,
 		Phone:       req.Phone,
@@ -74,8 +81,9 @@ func (m *MockGateway) DeleteCustomer(ctx context.Context, customerID string) err
 
 // Payment method operations
 func (m *MockGateway) AddPaymentMethod(ctx context.Context, req *PaymentMethodRequest) (*PaymentMethod, error) {
+	m.counter++
 	paymentMethod := &PaymentMethod{
-		ID:         "pm_mock_" + time.Now().Format("20060102150405"),
+		ID:         "pm_mock_" + time.Now().Format("20060102150405") + fmt.Sprintf("%d", m.counter),
 		Type:       req.Type,
 		Customer:   req.Customer,
 		Metadata:   req.Metadata,
@@ -124,8 +132,9 @@ func (m *MockGateway) DetachPaymentMethod(ctx context.Context, paymentMethodID s
 
 // Charge operations
 func (m *MockGateway) CreateCharge(ctx context.Context, req *ChargeRequest) (*Charge, error) {
+	m.counter++
 	charge := &Charge{
-		ID:              "ch_mock_" + time.Now().Format("20060102150405"),
+		ID:              "ch_mock_" + time.Now().Format("20060102150405") + fmt.Sprintf("%d", m.counter),
 		Amount:          req.Amount,
 		Currency:        req.Currency,
 		Status:          "succeeded",
@@ -161,8 +170,9 @@ func (m *MockGateway) ListCharges(ctx context.Context, customerID string, limit 
 
 // Refund operations
 func (m *MockGateway) CreateRefund(ctx context.Context, req *RefundRequest) (*Refund, error) {
+	m.counter++
 	refund := &Refund{
-		ID:         "re_mock_" + time.Now().Format("20060102150405"),
+		ID:         "re_mock_" + time.Now().Format("20060102150405") + fmt.Sprintf("%d", m.counter),
 		ChargeID:   req.ChargeID,
 		Amount:     req.Amount,
 		Currency:   "usd", // Default currency
@@ -197,8 +207,9 @@ func (m *MockGateway) ListRefunds(ctx context.Context, chargeID string, limit in
 
 // Dispute operations
 func (m *MockGateway) CreateDispute(ctx context.Context, req *DisputeRequest) (*Dispute, error) {
+	m.counter++
 	dispute := &Dispute{
-		ID:         "dp_mock_" + time.Now().Format("20060102150405"),
+		ID:         "dp_mock_" + time.Now().Format("20060102150405") + fmt.Sprintf("%d", m.counter),
 		ChargeID:   req.ChargeID,
 		Amount:     req.Amount,
 		Currency:   "usd", // Default currency
@@ -239,6 +250,178 @@ func (m *MockGateway) UpdateDisputeStatus(ctx context.Context, disputeID string,
 		return dispute, nil
 	}
 	return nil, fmt.Errorf("dispute not found")
+}
+
+// Subscription plan operations
+func (m *MockGateway) CreateSubscriptionPlan(ctx context.Context, req *SubscriptionPlanRequest) (*SubscriptionPlan, error) {
+	m.counter++
+	plan := &SubscriptionPlan{
+		ID:             "sp_mock_" + time.Now().Format("20060102150405") + fmt.Sprintf("%d", m.counter),
+		Name:           req.Name,
+		Description:    req.Description,
+		Amount:         req.Amount,
+		Currency:       req.Currency,
+		Interval:       req.Interval,
+		IntervalCount:  req.IntervalCount,
+		TrialPeriodDays: req.TrialPeriodDays,
+		Metadata:       req.Metadata,
+		Created:        time.Now().Unix(),
+		Updated:        time.Now().Unix(),
+		ProviderID:     "sp_mock",
+	}
+
+	m.subscriptionPlans[plan.ID] = plan
+	
+	return plan, nil
+}
+
+func (m *MockGateway) GetSubscriptionPlan(ctx context.Context, planID string) (*SubscriptionPlan, error) {
+	if plan, exists := m.subscriptionPlans[planID]; exists {
+		return plan, nil
+	}
+	return nil, fmt.Errorf("subscription plan not found")
+}
+
+func (m *MockGateway) ListSubscriptionPlans(ctx context.Context, params *SubscriptionPlanListParams) ([]*SubscriptionPlan, error) {
+	var plans []*SubscriptionPlan
+	for _, plan := range m.subscriptionPlans {
+		plans = append(plans, plan)
+	}
+	
+	// Apply limit and offset if specified
+	if params.Limit > 0 && len(plans) > params.Limit {
+		if params.Offset >= len(plans) {
+			return []*SubscriptionPlan{}, nil
+		}
+		end := params.Offset + params.Limit
+		if end > len(plans) {
+			end = len(plans)
+		}
+		plans = plans[params.Offset:end]
+	} else if params.Offset > 0 && params.Offset < len(plans) {
+		plans = plans[params.Offset:]
+	}
+	
+	return plans, nil
+}
+
+func (m *MockGateway) UpdateSubscriptionPlan(ctx context.Context, planID string, req *SubscriptionPlanUpdateRequest) (*SubscriptionPlan, error) {
+	if plan, exists := m.subscriptionPlans[planID]; exists {
+		// Store the original updated timestamp for comparison
+		originalUpdated := plan.Updated
+		
+		if req.Name != nil {
+			plan.Name = *req.Name
+		}
+		if req.Description != nil {
+			plan.Description = *req.Description
+		}
+		if req.Amount != nil {
+			plan.Amount = *req.Amount
+		}
+		if req.TrialPeriodDays != nil {
+			plan.TrialPeriodDays = req.TrialPeriodDays
+		}
+		if req.Metadata != nil {
+			plan.Metadata = req.Metadata
+		}
+		// Ensure update timestamp is newer than the original updated timestamp
+		plan.Updated = originalUpdated + 1
+		
+		return plan, nil
+	}
+	return nil, fmt.Errorf("subscription plan not found")
+}
+
+func (m *MockGateway) DeleteSubscriptionPlan(ctx context.Context, planID string) error {
+	if _, exists := m.subscriptionPlans[planID]; exists {
+		delete(m.subscriptionPlans, planID)
+		return nil
+	}
+	return fmt.Errorf("subscription plan not found")
+}
+
+// Subscription operations
+func (m *MockGateway) CreateSubscription(ctx context.Context, req *SubscriptionRequest) (*Subscription, error) {
+	m.counter++
+	subscription := &Subscription{
+		ID:                 "sub_mock_" + time.Now().Format("20060102150405") + fmt.Sprintf("%d", m.counter),
+		CustomerID:         req.CustomerID,
+		PlanID:             req.PlanID,
+		Status:             "active",
+		CurrentPeriodStart: time.Now().Unix(),
+		CurrentPeriodEnd:   time.Now().AddDate(0, 1, 0).Unix(), // 1 month from now
+		TrialStart:         req.TrialEnd,
+		TrialEnd:           req.TrialEnd,
+		Metadata:           req.Metadata,
+		Created:            time.Now().Unix(),
+		Updated:            time.Now().Unix(),
+		ProviderID:         "sub_mock",
+	}
+
+	m.subscriptions[subscription.ID] = subscription
+	return subscription, nil
+}
+
+func (m *MockGateway) GetSubscription(ctx context.Context, subscriptionID string) (*Subscription, error) {
+	if subscription, exists := m.subscriptions[subscriptionID]; exists {
+		return subscription, nil
+	}
+	return nil, fmt.Errorf("subscription not found")
+}
+
+func (m *MockGateway) ListSubscriptions(ctx context.Context, params *SubscriptionListParams) ([]*Subscription, error) {
+	var subscriptions []*Subscription
+	for _, subscription := range m.subscriptions {
+		if params.CustomerID != "" && subscription.CustomerID != params.CustomerID {
+			continue
+		}
+		if params.Status != "" && subscription.Status != params.Status {
+			continue
+		}
+		subscriptions = append(subscriptions, subscription)
+	}
+	return subscriptions, nil
+}
+
+func (m *MockGateway) UpdateSubscription(ctx context.Context, subscriptionID string, req *SubscriptionUpdateRequest) (*Subscription, error) {
+	if subscription, exists := m.subscriptions[subscriptionID]; exists {
+		if req.PlanID != nil {
+			subscription.PlanID = *req.PlanID
+		}
+		if req.PaymentMethod != nil {
+			// Mock implementation doesn't store payment method
+		}
+		if req.TrialEnd != nil {
+			subscription.TrialEnd = req.TrialEnd
+		}
+		if req.Metadata != nil {
+			subscription.Metadata = req.Metadata
+		}
+		subscription.Updated = time.Now().Unix()
+		return subscription, nil
+	}
+	return nil, fmt.Errorf("subscription not found")
+}
+
+func (m *MockGateway) CancelSubscription(ctx context.Context, subscriptionID string) (*Subscription, error) {
+	if subscription, exists := m.subscriptions[subscriptionID]; exists {
+		subscription.Status = "canceled"
+		subscription.CanceledAt = &[]int64{time.Now().Unix()}[0]
+		subscription.Updated = time.Now().Unix()
+		return subscription, nil
+	}
+	return nil, fmt.Errorf("subscription not found")
+}
+
+func (m *MockGateway) ReactivateSubscription(ctx context.Context, subscriptionID string) (*Subscription, error) {
+	if subscription, exists := m.subscriptions[subscriptionID]; exists {
+		subscription.Status = "active"
+		subscription.CanceledAt = nil
+		subscription.Updated = time.Now().Unix()
+		return subscription, nil
+	}
+	return nil, fmt.Errorf("subscription not found")
 }
 
 // Provider information

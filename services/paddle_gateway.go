@@ -309,18 +309,51 @@ func (g *PaddleGateway) ListDisputes(ctx context.Context, chargeID string, limit
 
 // UpdateDisputeStatus updates a dispute status
 func (g *PaddleGateway) UpdateDisputeStatus(ctx context.Context, disputeID string, status string) (*Dispute, error) {
-	ctx, span := g.tracer.Start(ctx, "PaddleGateway.UpdateDisputeStatus")
-	defer span.End()
+	return nil, fmt.Errorf("dispute status updates not implemented yet for Paddle")
+}
 
-	if disputeID == "" {
-		return nil, fmt.Errorf("dispute ID is required")
-	}
+// Subscription plan operations - placeholder implementations
+func (g *PaddleGateway) CreateSubscriptionPlan(ctx context.Context, req *SubscriptionPlanRequest) (*SubscriptionPlan, error) {
+	return nil, fmt.Errorf("subscription plans not implemented yet for Paddle")
+}
 
-	if status == "" {
-		return nil, fmt.Errorf("status is required")
-	}
+func (g *PaddleGateway) GetSubscriptionPlan(ctx context.Context, planID string) (*SubscriptionPlan, error) {
+	return nil, fmt.Errorf("subscription plans not implemented yet for Paddle")
+}
 
-	// Note: This is a placeholder implementation
-	// In a real implementation, you would call Paddle's API
-	return nil, fmt.Errorf("Paddle dispute status update not implemented yet")
+func (g *PaddleGateway) ListSubscriptionPlans(ctx context.Context, params *SubscriptionPlanListParams) ([]*SubscriptionPlan, error) {
+	return nil, fmt.Errorf("subscription plans not implemented yet for Paddle")
+}
+
+func (g *PaddleGateway) UpdateSubscriptionPlan(ctx context.Context, planID string, req *SubscriptionPlanUpdateRequest) (*SubscriptionPlan, error) {
+	return nil, fmt.Errorf("subscription plans not implemented yet for Paddle")
+}
+
+func (g *PaddleGateway) DeleteSubscriptionPlan(ctx context.Context, planID string) error {
+	return fmt.Errorf("subscription plans not implemented yet for Paddle")
+}
+
+// Subscription operations - placeholder implementations
+func (g *PaddleGateway) CreateSubscription(ctx context.Context, req *SubscriptionRequest) (*Subscription, error) {
+	return nil, fmt.Errorf("subscriptions not implemented yet for Paddle")
+}
+
+func (g *PaddleGateway) GetSubscription(ctx context.Context, subscriptionID string) (*Subscription, error) {
+	return nil, fmt.Errorf("subscriptions not implemented yet for Paddle")
+}
+
+func (g *PaddleGateway) ListSubscriptions(ctx context.Context, params *SubscriptionListParams) ([]*Subscription, error) {
+	return nil, fmt.Errorf("subscriptions not implemented yet for Paddle")
+}
+
+func (g *PaddleGateway) UpdateSubscription(ctx context.Context, subscriptionID string, req *SubscriptionUpdateRequest) (*Subscription, error) {
+	return nil, fmt.Errorf("subscriptions not implemented yet for Paddle")
+}
+
+func (g *PaddleGateway) CancelSubscription(ctx context.Context, subscriptionID string) (*Subscription, error) {
+	return nil, fmt.Errorf("subscriptions not implemented yet for Paddle")
+}
+
+func (g *PaddleGateway) ReactivateSubscription(ctx context.Context, subscriptionID string) (*Subscription, error) {
+	return nil, fmt.Errorf("subscriptions not implemented yet for Paddle")
 }
