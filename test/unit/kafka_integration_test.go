@@ -311,9 +311,9 @@ func TestCloudEventsVersioning(t *testing.T) {
 	t.Run("Can register new event schema version", func(t *testing.T) {
 		// Arrange
 		schema := &kafka.EventSchema{
-			Version:     "1.1",
-			Type:        "customer.created",
-			Description: "Customer created event with additional fields",
+			Version:        "1.1",
+			Type:           "customer.created",
+			Description:    "Customer created event with additional fields",
 			RequiredFields: []string{"id", "type", "source", "specversion", "time"},
 			OptionalFields: []string{"customer_id", "email", "name", "metadata"},
 		}
@@ -406,7 +406,7 @@ func TestDeadLetterQueue(t *testing.T) {
 
 		// Assert
 		assert.NoError(t, err, "Should be able to send failed event to dead letter queue")
-		
+
 		// Verify event is in dead letter queue
 		dlqEvents := dlqManager.GetDeadLetterEvents()
 		assert.Len(t, dlqEvents, 1, "Should have one event in dead letter queue")
@@ -436,7 +436,7 @@ func TestDeadLetterQueue(t *testing.T) {
 		// Assert
 		assert.NoError(t, err, "Should be able to retry event from dead letter queue")
 		assert.Equal(t, failedEvent.ID, retryEvent.ID, "Retried event ID should match")
-		
+
 		// Verify event is removed from dead letter queue
 		dlqEvents := dlqManager.GetDeadLetterEvents()
 		assert.Len(t, dlqEvents, 1, "Should still have one event in dead letter queue (the first one)")
@@ -458,7 +458,7 @@ func TestDeadLetterQueue(t *testing.T) {
 
 		// Assert
 		assert.NoError(t, err, "Should be able to clear dead letter queue")
-		
+
 		// Verify queue is empty
 		dlqEvents := dlqManager.GetDeadLetterEvents()
 		assert.Len(t, dlqEvents, 0, "Dead letter queue should be empty after clearing")
@@ -486,7 +486,7 @@ func TestEventReplay(t *testing.T) {
 
 		// Assert
 		assert.NoError(t, err, "Should be able to store event for replay")
-		
+
 		// Verify event is stored
 		storedEvents := replayManager.GetStoredEvents()
 		assert.Len(t, storedEvents, 1, "Should have one stored event")
@@ -533,7 +533,7 @@ func TestEventReplay(t *testing.T) {
 
 		// Assert
 		assert.NoError(t, err, "Should be able to clear stored events")
-		
+
 		// Verify events are cleared
 		storedEvents := replayManager.GetStoredEvents()
 		assert.Len(t, storedEvents, 0, "Stored events should be empty after clearing")
